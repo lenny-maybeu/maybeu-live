@@ -1,7 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getDatabase, ref, onValue, set, push, update } from "firebase/database";
 
-// ВАШИ РАБОЧИЕ КЛЮЧИ (Связь идет через них)
 const firebaseConfig = {
   apiKey: "AIzaSyC-vmOaMUz_fBFjltcxp6RyNvyMmAmdqJ0",
   authDomain: "maybeu-live.firebaseapp.com",
@@ -16,39 +15,32 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-// Вспомогательная функция, чтобы найти callback (функцию ответа),
-// даже если ваш код передает лишние аргументы
-const getCallback = (args: any[]) => {
-  return args.find(arg => typeof arg === 'function');
-};
+const getCallback = (args: any[]) => args.find(arg => typeof arg === 'function');
 
 export class FirebaseService {
   
-  // --- ОСНОВНОЕ СОСТОЯНИЕ ИГРЫ ---
+  // --- STATE ---
   static subscribeToGameState(...args: any[]) {
-    console.log("🔥 Firebase: Подписка на GameState");
+    console.log("🔥 Firebase: Проверка состояния игры...");
     const cb = getCallback(args);
-    if (cb) {
-      return onValue(ref(db, 'gameState'), (snapshot) => {
-        const val = snapshot.val();
-        console.log("🔥 Firebase: Получены данные игры:", val);
-        cb(val);
-      });
-    }
+    if (cb) return onValue(ref(db, 'gameState'), (s) => {
+        console.log("🔥 Firebase: Данные игры получены", s.val());
+        cb(s.val());
+    });
     return () => {};
   }
 
-  // Дублер для совместимости
   static onGameStateChange(...args: any[]) {
     return this.subscribeToGameState(...args);
   }
 
   static updateGameState(data: any, ...args: any[]) {
-    console.log("🔥 Firebase: Отправка данных игры:", data);
+    console.log("🔥 Firebase: Обновление игры ->", data);
     set(ref(db, 'gameState'), { activeEvent: data, timestamp: Date.now() });
   }
 
   static async resetGame(...args: any[]) {
+    console.log("🔥 Firebase: Сброс игры");
     await set(ref(db, 'gameState'), null);
   }
   
@@ -56,9 +48,8 @@ export class FirebaseService {
     await this.resetGame();
   }
 
-  // --- ГОСТИ ---
+  // --- GUESTS ---
   static registerGuest(...args: any[]) {
-    // Пытаемся понять, передали объект или два параметра
     let id, name;
     if (typeof args[0] === 'object') {
       id = args[0].id || args[0].guestId;
@@ -67,72 +58,54 @@ export class FirebaseService {
       id = args[0];
       name = args[1];
     }
-
-    if (id) {
-      console.log(`🔥 Firebase: Регистрация гостя ${name} (${id})`);
-      set(ref(db, `guests/${id}`), { name, joinedAt: Date.now(), score: 0 });
-    }
+    console.log(`🔥 Firebase: Гость ${name} пытается войти...`);
+    if (id) set(ref(db, `guests/${id}`), { name, joinedAt: Date.now(), score: 0 });
   }
 
   static onGuestsCountChange(...args: any[]) {
+    console.log("🔥 Firebase: Подписка на количество гостей");
     const cb = getCallback(args);
-    if (cb) {
-      return onValue(ref(db, 'guests'), (snapshot) => cb(snapshot.size));
-    }
+    if (cb) return onValue(ref(db, 'guests'), (s) => cb(s.size));
     return () => {};
   }
 
-  // --- ЭКРАН (ПУЛЬС) ---
+  // --- SCREEN PULSE ---
   static sendScreenPulse(...args: any[]) {
+    // console.log("🔥 Тук-тук (Пульс отправлен)"); // Можно раскомментировать, если нужно
     set(ref(db, 'screenPulse'), Date.now());
   }
 
   static onScreenPulseChange(...args: any[]) {
+    console.log("🔥 Firebase: Слушаем пульс экрана...");
     const cb = getCallback(args);
-    if (cb) {
-      return onValue(ref(db, 'screenPulse'), (s) => cb(s.val()));
-    }
+    if (cb) return onValue(ref(db, 'screenPulse'), (s) => cb(s.val()));
     return () => {};
   }
 
-  // --- ОТВЕТЫ ---
+  // --- ANSWERS & OTHER ---
   static submitAnswer(...args: any[]) {
+    console.log("🔥 Firebase: Ответ отправлен");
     const arg1 = args[0];
-    const arg2 = args[1];
-    
-    // Если передали объект {guestId, answerIdx}
-    if (typeof arg1 === 'object') {
-       const key = push(ref(db, 'answers')).key;
-       update(ref(db), { [`answers/${key}`]: arg1 });
-    } 
-    // Если передали (guestId, answerIdx) отдельно
-    else {
-       const key = push(ref(db, 'answers')).key;
-       update(ref(db), { [`answers/${key}`]: { guestId: arg1, answerIdx: arg2 } });
-    }
+    const key = push(ref(db, 'answers')).key;
+    const payload = typeof arg1 === 'object' ? arg1 : { guestId: arg1, answerIdx: args[1] };
+    update(ref(db), { [`answers/${key}`]: payload });
   }
 
   static onAnswersChange(...args: any[]) {
     const cb = getCallback(args);
-    if (cb) {
-      return onValue(ref(db, 'answers'), (s) => cb(s.val()));
-    }
+    if (cb) return onValue(ref(db, 'answers'), (s) => cb(s.val()));
     return () => {};
   }
   
-  // --- КАРТИНКИ И ПРОГРЕСС ---
   static addGuestImage(...args: any[]) {
-    const arg1 = args[0];
-    const arg2 = args[1];
-    const payload = typeof arg1 === 'object' ? arg1 : { guestId: arg1, imageUrl: arg2 };
+    console.log("🔥 Firebase: Загрузка картинки");
+    const payload = typeof args[0] === 'object' ? args[0] : { guestId: args[0], imageUrl: args[1] };
     push(ref(db, 'guestImages'), payload);
   }
   
   static onImagesChange(...args: any[]) {
     const cb = getCallback(args);
-    if (cb) {
-      return onValue(ref(db, 'guestImages'), (s) => cb(s.val()));
-    }
+    if (cb) return onValue(ref(db, 'guestImages'), (s) => cb(s.val()));
     return () => {};
   }
 
@@ -142,13 +115,10 @@ export class FirebaseService {
 
   static onPushProgressChange(...args: any[]) {
     const cb = getCallback(args);
-    if (cb) {
-      return onValue(ref(db, 'pushProgress'), (s) => cb(s.val()));
-    }
+    if (cb) return onValue(ref(db, 'pushProgress'), (s) => cb(s.val()));
     return () => {};
   }
 }
 
-// Экспорты для надежности (чтобы работали и import { FirebaseService } и import ... from)
 export const updateGameState = FirebaseService.updateGameState;
 export const subscribeToGameState = FirebaseService.subscribeToGameState;
