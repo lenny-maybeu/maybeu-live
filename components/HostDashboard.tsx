@@ -14,9 +14,9 @@ interface Props {
 
 const TRANSLATIONS = {
   ru: {
-    upcoming: 'События', create: 'Создать', manage: 'Игры', clients: 'Клиенты', infoTab: 'План', timingTab: 'Сценарий', eventsTab: 'Список',
-    live: 'В ЭФИРЕ', soon: 'СКОРО', guests: 'гостей', code: 'Код', createTitle: 'Новое событие', editTitle: 'Правка', save: 'ОК', cancel: 'Отмена',
-    goLive: 'ВЫЙТИ В ЭФИР', stopLive: 'ЗАВЕРШИТЬ ЭФИР', screenStatus: 'Экран', screenReady: 'ОНЛАЙН', screenOffline: 'ОФФЛАЙН'
+    upcoming: 'РЎРѕР±С‹С‚РёСЏ', create: 'РЎРѕР·РґР°С‚СЊ', manage: 'РРіСЂС‹', clients: 'РљР»РёРµРЅС‚С‹', infoTab: 'РџР»Р°РЅ', timingTab: 'РЎС†РµРЅР°СЂРёР№', eventsTab: 'РЎРїРёСЃРѕРє',
+    live: 'Р’ Р­Р¤РР Р•', soon: 'РЎРљРћР Рћ', guests: 'РіРѕСЃС‚РµР№', code: 'РљРѕРґ', createTitle: 'РќРѕРІРѕРµ СЃРѕР±С‹С‚РёРµ', editTitle: 'РџСЂР°РІРєР°', save: 'РћРљ', cancel: 'РћС‚РјРµРЅР°',
+    goLive: 'Р’Р«Р™РўР Р’ Р­Р¤РР ', stopLive: 'Р—РђР’Р•Р РЁРРўР¬ Р­Р¤РР ', screenStatus: 'Р­РєСЂР°РЅ', screenReady: 'РћРќР›РђР™Рќ', screenOffline: 'РћР¤Р¤Р›РђР™Рќ'
   },
   en: {
     upcoming: 'Events', create: 'Create', manage: 'Games', clients: 'Clients', infoTab: 'Planner', timingTab: 'Timeline', eventsTab: 'List',
@@ -40,7 +40,7 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
     localStorage.setItem('mc_events', JSON.stringify(events));
   }, [events]);
 
-  // Мониторинг пульса экрана и количества гостей через Firebase
+  // РњРѕРЅРёС‚РѕСЂРёРЅРі РїСѓР»СЊСЃР° СЌРєСЂР°РЅР° Рё РєРѕР»РёС‡РµСЃС‚РІР° РіРѕСЃС‚РµР№ С‡РµСЂРµР· Firebase
   useEffect(() => {
     if (activeEvent?.status === 'LIVE') {
       const unsubPulse = FirebaseService.onScreenPulseChange(activeEvent.code, (timestamp) => {
@@ -96,7 +96,7 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
                   {t.screenStatus}: {isScreenConnected ? t.screenReady : t.screenOffline}
                </span>
             </div>
-            {activeEvent?.status === 'LIVE' && <div className="text-[9px] font-black text-indigo-400 uppercase">Гостей: {guestCount}</div>}
+            {activeEvent?.status === 'LIVE' && <div className="text-[9px] font-black text-indigo-400 uppercase">Р“РѕСЃС‚РµР№: {guestCount}</div>}
          </div>
       </div>
 
@@ -111,7 +111,7 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
                     <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${event.status === 'LIVE' ? 'bg-rose-600 text-white animate-pulse' : 'bg-slate-800 text-slate-400'}`}>{event.status === 'LIVE' ? t.live : t.soon}</span>
                     <span className="text-slate-500 text-sm">{event.date}</span>
                   </div>
-                  <h3 className="text-2xl font-black text-white mt-4">{event.name} — <span className="text-indigo-400 font-mono">{event.code}</span></h3>
+                  <h3 className="text-2xl font-black text-white mt-4">{event.name} вЂ” <span className="text-indigo-400 font-mono">{event.code}</span></h3>
                 </div>
               ))}
             </div>
@@ -132,10 +132,10 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
       {isModalOpen && (
         <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-8 space-y-4">
-            <h2 className="text-2xl font-black text-white italic">Новое событие</h2>
-            <input placeholder="Название" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white" />
-            <input placeholder="Код (LOVE24)" value={formData.code} onChange={e => setFormData({...formData, code: e.target.value.toUpperCase()})} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white font-mono" />
-            <div className="flex gap-4"><button onClick={() => setIsModalOpen(false)} className="flex-1 bg-slate-800 py-4 rounded-xl text-white font-black uppercase text-xs">Отмена</button><button onClick={handleSaveEvent} className="flex-1 bg-indigo-600 py-4 rounded-xl text-white font-black uppercase text-xs">Сохранить</button></div>
+            <h2 className="text-2xl font-black text-white italic">РќРѕРІРѕРµ СЃРѕР±С‹С‚РёРµ</h2>
+            <input placeholder="РќР°Р·РІР°РЅРёРµ" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white" />
+            <input placeholder="РљРѕРґ (LOVE24)" value={formData.code} onChange={e => setFormData({...formData, code: e.target.value.toUpperCase()})} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white font-mono" />
+            <div className="flex gap-4"><button onClick={() => setIsModalOpen(false)} className="flex-1 bg-slate-800 py-4 rounded-xl text-white font-black uppercase text-xs">РћС‚РјРµРЅР°</button><button onClick={handleSaveEvent} className="flex-1 bg-indigo-600 py-4 rounded-xl text-white font-black uppercase text-xs">РЎРѕС…СЂР°РЅРёС‚СЊ</button></div>
           </div>
         </div>
       )}

@@ -12,13 +12,13 @@ interface Props {
 
 const TRANSLATIONS = {
   ru: {
-    quiz: 'Квиз', believe: 'Верю/Не верю', quest: 'Квест', shake: 'Тряси!', push: 'Жми!', art: 'ИИ Арт',
-    start: 'НАЧАТЬ ИГРУ', questions: 'Список вопросов', aiGen: 'Сгенерировать через ИИ', manualTitle: 'Свой вопрос',
-    addToList: 'Добавить в список', thinking: 'Генерация...', status: 'Текущий статус', onAir: 'В эфире', lobby: 'Ожидание',
-    next: 'Далее', reset: 'Сброс', gameEnd: 'Завершить игру', clearScreen: 'ОЧИСТИТЬ ЭКРАН', edit: 'Правка', save: 'ОК',
-    aiTopic: 'Тема', aiCount: 'Кол-во', pushStart: 'ОТСЧЕТ 10 СЕК', artTheme: 'Тема конкурса',
-    noQs: 'Пусто. Создайте вручную или через ИИ!', qPlaceholder: 'Текст вопроса...', optPlaceholder: 'Вариант',
-    trueBtn: 'ВЕРЮ', falseBtn: 'НЕ ВЕРЮ', questFinal: 'ИТОГИ КВЕСТА'
+    quiz: 'РљРІРёР·', believe: 'Р’РµСЂСЋ/РќРµ РІРµСЂСЋ', quest: 'РљРІРµСЃС‚', shake: 'РўСЂСЏСЃРё!', push: 'Р–РјРё!', art: 'РР РђСЂС‚',
+    start: 'РќРђР§РђРўР¬ РР“Р РЈ', questions: 'РЎРїРёСЃРѕРє РІРѕРїСЂРѕСЃРѕРІ', aiGen: 'РЎРіРµРЅРµСЂРёСЂРѕРІР°С‚СЊ С‡РµСЂРµР· РР', manualTitle: 'РЎРІРѕР№ РІРѕРїСЂРѕСЃ',
+    addToList: 'Р”РѕР±Р°РІРёС‚СЊ РІ СЃРїРёСЃРѕРє', thinking: 'Р“РµРЅРµСЂР°С†РёСЏ...', status: 'РўРµРєСѓС‰РёР№ СЃС‚Р°С‚СѓСЃ', onAir: 'Р’ СЌС„РёСЂРµ', lobby: 'РћР¶РёРґР°РЅРёРµ',
+    next: 'Р”Р°Р»РµРµ', reset: 'РЎР±СЂРѕСЃ', gameEnd: 'Р—Р°РІРµСЂС€РёС‚СЊ РёРіСЂСѓ', clearScreen: 'РћР§РРЎРўРРўР¬ Р­РљР РђРќ', edit: 'РџСЂР°РІРєР°', save: 'РћРљ',
+    aiTopic: 'РўРµРјР°', aiCount: 'РљРѕР»-РІРѕ', pushStart: 'РћРўРЎР§Р•Рў 10 РЎР•Рљ', artTheme: 'РўРµРјР° РєРѕРЅРєСѓСЂСЃР°',
+    noQs: 'РџСѓСЃС‚Рѕ. РЎРѕР·РґР°Р№С‚Рµ РІСЂСѓС‡РЅСѓСЋ РёР»Рё С‡РµСЂРµР· РР!', qPlaceholder: 'РўРµРєСЃС‚ РІРѕРїСЂРѕСЃР°...', optPlaceholder: 'Р’Р°СЂРёР°РЅС‚',
+    trueBtn: 'Р’Р•Р Р®', falseBtn: 'РќР• Р’Р•Р Р®', questFinal: 'РРўРћР“Р РљР’Р•РЎРўРђ'
   },
   en: {
     quiz: 'Quiz', believe: 'Believe/Not', quest: 'Quest', shake: 'Shake!', push: 'Push!', art: 'AI Art',
@@ -45,11 +45,11 @@ const QuizControl: React.FC<Props> = ({ activeEvent, lang }) => {
   const [manualQ, setManualQ] = useState('');
   const [manualOptions, setManualOptions] = useState(['', '', '', '']);
   const [manualCorrect, setManualCorrect] = useState(0);
-  const [artTheme, setArtTheme] = useState(lang === 'ru' ? 'Киберпанк' : 'Cyberpunk');
+  const [artTheme, setArtTheme] = useState(lang === 'ru' ? 'РљРёР±РµСЂРїР°РЅРє' : 'Cyberpunk');
 
   const t = TRANSLATIONS[lang];
 
-  // Синхронизация с Firebase при каждом изменении локального состояния
+  // РЎРёРЅС…СЂРѕРЅРёР·Р°С†РёСЏ СЃ Firebase РїСЂРё РєР°Р¶РґРѕРј РёР·РјРµРЅРµРЅРёРё Р»РѕРєР°Р»СЊРЅРѕРіРѕ СЃРѕСЃС‚РѕСЏРЅРёСЏ
   useEffect(() => {
     if (activeEvent) {
       FirebaseService.updateGameState(activeEvent.code, {
@@ -101,7 +101,7 @@ const QuizControl: React.FC<Props> = ({ activeEvent, lang }) => {
   };
 
   const handleFinishGame = () => {
-    setCurrentIdx(questions.length + 10); // Условный флаг финиша
+    setCurrentIdx(questions.length + 10); // РЈСЃР»РѕРІРЅС‹Р№ С„Р»Р°Рі С„РёРЅРёС€Р°
   };
 
   const handleGenerateQuestions = async () => {
@@ -121,7 +121,7 @@ const QuizControl: React.FC<Props> = ({ activeEvent, lang }) => {
     const newQ: QuizQuestion = {
       id: Math.random().toString(36).substr(2, 9),
       question: manualQ,
-      options: gameMode === GameType.BELIEVE_NOT ? (lang === 'ru' ? ['Верю', 'Не верю'] : ['Believe', 'Don\'t Believe']) : [...manualOptions],
+      options: gameMode === GameType.BELIEVE_NOT ? (lang === 'ru' ? ['Р’РµСЂСЋ', 'РќРµ РІРµСЂСЋ'] : ['Believe', 'Don\'t Believe']) : [...manualOptions],
       correctAnswerIndex: manualCorrect
     };
     setQuestions(prev => [...prev, newQ]);

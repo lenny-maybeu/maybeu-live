@@ -1,8 +1,8 @@
+import { initializeApp } from "firebase/app";
+import { getDatabase, ref, onValue, set } from "firebase/database";
+import { LiveEvent } from "../types";
 
-import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, set, onValue, update, push, remove, get } from 'firebase/database';
-
-// Конфигурация Firebase, предоставленная пользователем
+// Р’РђРЁР РќРђРЎРўР РћР™РљР (РЇ РёС… СѓР¶Рµ РёСЃРїСЂР°РІРёР» Рё РІСЃС‚Р°РІРёР»)
 const firebaseConfig = {
   apiKey: "AIzaSyC-vmOaMUz_fBFjltcxp6RyNvyMmAmdqJ0",
   authDomain: "maybeu-live.firebaseapp.com",
@@ -14,102 +14,28 @@ const firebaseConfig = {
   measurementId: "G-1BC95R85WM"
 };
 
+// РРЅРёС†РёР°Р»РёР·Р°С†РёСЏ
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-export const FirebaseService = {
-  // Управление глобальным состоянием игры (тип игры, текущий вопрос, стадия)
-  updateGameState: async (eventCode: string, state: any) => {
-    if (!eventCode) return;
-    await set(ref(db, `events/${eventCode}/gameState`), {
-      ...state,
-      timestamp: Date.now()
-    });
-  },
+// Р¤СѓРЅРєС†РёСЏ 1: РЎР»СѓС€Р°С‚СЊ РёР·РјРµРЅРµРЅРёСЏ (РґР»СЏ РІСЃРµС…)
+export const subscribeToGameState = (callback: (data: any) => void) => {
+  const starCountRef = ref(db, 'gameState');
+  onValue(starCountRef, (snapshot) => {
+    const data = snapshot.val();
+    callback(data);
+  });
+};
 
-  // Подписка на изменение состояния игры
-  onGameStateChange: (eventCode: string, callback: (state: any) => void) => {
-    const stateRef = ref(db, `events/${eventCode}/gameState`);
-    return onValue(stateRef, (snapshot) => {
-      callback(snapshot.val());
-    });
-  },
+// Р¤СѓРЅРєС†РёСЏ 2: РћС‚РїСЂР°РІРёС‚СЊ РёР·РјРµРЅРµРЅРёСЏ (РґР»СЏ Р’РµРґСѓС‰РµРіРѕ)
+export const updateGameState = (event: LiveEvent | null) => {
+  set(ref(db, 'gameState'), {
+    activeEvent: event,
+    timestamp: Date.now()
+  });
+};
 
-  // Регистрация гостя в событии
-  registerGuest: async (eventCode: string, guestName: string) => {
-    const guestRef = ref(db, `events/${eventCode}/guests/${guestName}`);
-    await set(guestRef, { joinedAt: Date.now(), lastSeen: Date.now() });
-  },
-
-  // Получение количества онлайн гостей
-  onGuestsCountChange: (eventCode: string, callback: (count: number) => void) => {
-    const guestsRef = ref(db, `events/${eventCode}/guests`);
-    return onValue(guestsRef, (snapshot) => {
-      const data = snapshot.val();
-      callback(data ? Object.keys(data).length : 0);
-    });
-  },
-
-  // Отправка ответа на квиз
-  submitAnswer: async (eventCode: string, type: 'quiz' | 'quest', key: string | number, name: string, data: any) => {
-    const answerRef = ref(db, `events/${eventCode}/answers/${type}/${key}/${name}`);
-    await set(answerRef, { ...data, timestamp: Date.now() });
-  },
-
-  // Подписка на все ответы (для экрана результатов)
-  onAnswersChange: (eventCode: string, type: 'quiz' | 'quest', callback: (data: any) => void) => {
-    const answersRef = ref(db, `events/${eventCode}/answers/${type}`);
-    return onValue(answersRef, (snapshot) => {
-      callback(snapshot.val() || {});
-    });
-  },
-
-  // Обновление прогресса в игре "Жми!" (Push It)
-  updatePushProgress: async (eventCode: string, name: string, count: number) => {
-    await set(ref(db, `events/${eventCode}/pushProgress/${name}`), count);
-  },
-
-  // Подписка на прогресс гонки
-  onPushProgressChange: (eventCode: string, callback: (data: any) => void) => {
-    const pushRef = ref(db, `events/${eventCode}/pushProgress`);
-    return onValue(pushRef, (snapshot) => {
-      callback(snapshot.val() || {});
-    });
-  },
-
-  // Добавление ИИ-арта
-  addGuestImage: async (eventCode: string, imageData: any) => {
-    const imagesRef = ref(db, `events/${eventCode}/images`);
-    const newImageRef = push(imagesRef);
-    await set(newImageRef, imageData);
-  },
-
-  // Подписка на галерею ИИ-артов
-  onImagesChange: (eventCode: string, callback: (images: any[]) => void) => {
-    const imagesRef = ref(db, `events/${eventCode}/images`);
-    return onValue(imagesRef, (snapshot) => {
-      const data = snapshot.val();
-      const imagesList = data ? Object.values(data) : [];
-      callback(imagesList);
-    });
-  },
-
-  // Пульс для проверки соединения экрана
-  sendScreenPulse: (eventCode: string) => {
-    set(ref(db, `events/${eventCode}/screenPulse`), Date.now());
-  },
-
-  onScreenPulseChange: (eventCode: string, callback: (timestamp: number) => void) => {
-    const pulseRef = ref(db, `events/${eventCode}/screenPulse`);
-    return onValue(pulseRef, (snapshot) => {
-      callback(snapshot.val() || 0);
-    });
-  },
-
-  // Полная очистка данных игры
-  resetEvent: async (eventCode: string) => {
-    await remove(ref(db, `events/${eventCode}/gameState`));
-    await remove(ref(db, `events/${eventCode}/pushProgress`));
-    await remove(ref(db, `events/${eventCode}/answers`));
-  }
+// Р¤СѓРЅРєС†РёСЏ 3: РЎР±СЂРѕСЃ (Р’С‹С…РѕРґ)
+export const resetGame = () => {
+  set(ref(db, 'gameState'), null);
 };

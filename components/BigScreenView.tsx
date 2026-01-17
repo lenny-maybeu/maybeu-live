@@ -19,25 +19,25 @@ const BigScreenView: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => 
   
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // œÓ‰ÔËÒÍË Ì‡ Firebase
+  // –ü–æ–¥–ø–∏—Å–∫–∏ –Ω–∞ Firebase
   useEffect(() => {
     if (!initialEvent) return;
 
-    // œÛÎ¸Ò ˝Í‡Ì‡ ‰Îˇ ‚Â‰Û˘Â„Ó
+    // –ü—É–ª—å—Å —ç–∫—Ä–∞–Ω–∞ –¥–ª—è –≤–µ–¥—É—â–µ–≥–æ
     const pulseInterval = setInterval(() => {
       FirebaseService.sendScreenPulse(initialEvent.code);
     }, 1000);
 
-    // —ÎÛ¯‡ÚÂÎË ‰‡ÌÌ˚ı
+    // –°–ª—É—à–∞—Ç–µ–ª–∏ –¥–∞–Ω–Ω—ã—Ö
     const unsubGame = FirebaseService.onGameStateChange(initialEvent.code, (state) => {
       if (state) {
         setGameState(prev => {
           if (prev?.gameType !== state.gameType) setGameFinished(false);
-          // ¿‚ÚÓÏ‡ÚË˜ÂÒÍÓÂ ÓÔÂ‰ÂÎÂÌËÂ ÙËÌË¯‡
+          // –ê–≤—Ç–æ–º–∞—Ç–∏—á–µ—Å–∫–æ–µ –æ–ø—Ä–µ–¥–µ–ª–µ–Ω–∏–µ —Ñ–∏–Ω–∏—à–∞
           if (state.gameType === GameType.QUIZ || state.gameType === GameType.BELIEVE_NOT) {
              if (state.currentIdx >= (state.questions?.length || 0)) setGameFinished(true);
           }
-          if (state.currentIdx > 100) setGameFinished(true); // ’‡Í ‰Îˇ ÍÌÓÔÍË "«‡‚Â¯ËÚ¸"
+          if (state.currentIdx > 100) setGameFinished(true); // –•–∞–∫ –¥–ª—è –∫–Ω–æ–ø–∫–∏ "–ó–∞–≤–µ—Ä—à–∏—Ç—å"
           return state;
         });
       }
@@ -51,7 +51,7 @@ const BigScreenView: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => 
 
     const unsubPush = FirebaseService.onPushProgressChange(initialEvent.code, (data) => {
       setRaceProgress(data);
-      // œÓ‚ÂÍ‡ ÔÓ·Â‰ËÚÂÎˇ ‚ „ÓÌÍÂ ÍÎËÍÓ‚ (50 ÍÎËÍÓ‚)
+      // –ü—Ä–æ–≤–µ—Ä–∫–∞ –ø–æ–±–µ–¥–∏—Ç–µ–ª—è –≤ –≥–æ–Ω–∫–µ –∫–ª–∏–∫–æ–≤ (50 –∫–ª–∏–∫–æ–≤)
       const winner = Object.entries(data).find(([_, count]) => Number(count) >= 50);
       if (winner && !gameFinished) setGameFinished(true);
     });
@@ -88,7 +88,7 @@ const BigScreenView: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => 
     else document.exitFullscreen();
   };
 
-  if (!initialEvent) return <div className="h-full bg-slate-950 flex items-center justify-center text-slate-800 text-3xl font-black uppercase italic tracking-widest">ŒÊË‰‡ÌËÂ...</div>;
+  if (!initialEvent) return <div className="h-full bg-slate-950 flex items-center justify-center text-slate-800 text-3xl font-black uppercase italic tracking-widest">–û–∂–∏–¥–∞–Ω–∏–µ...</div>;
 
   if (!gameState || !gameState.isActive && !gameFinished) {
     return (
@@ -100,7 +100,7 @@ const BigScreenView: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => 
             <div className="mt-4 text-indigo-900 font-black text-xl uppercase tracking-widest">maybeu.live</div>
           </div>
           <div className="text-4xl font-bold text-slate-500 uppercase tracking-widest">
-            {onlineCount} ¬ ÒÂÚË ó  Œƒ: <span className="text-white font-mono">{initialEvent.code}</span>
+            {onlineCount} –í —Å–µ—Ç–∏ ‚Äî –ö–û–î: <span className="text-white font-mono">{initialEvent.code}</span>
           </div>
         </div>
         <button onClick={toggleFullscreen} className="absolute top-6 right-6 p-4 bg-white/5 text-slate-500 rounded-2xl"><Maximize2/></button>
@@ -117,15 +117,15 @@ const BigScreenView: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => 
           </div>
           <div>
             <h2 className="text-4xl font-black text-white italic uppercase">
-              {gameFinished ? '»“Œ√» »√–€' : gameState.gameType}
+              {gameFinished ? '–ò–¢–û–ì–ò –ò–ì–†–´' : gameState.gameType}
             </h2>
             {!gameFinished && (gameState.gameType === GameType.QUIZ || gameState.gameType === GameType.BELIEVE_NOT) && (
-               <p className="text-xl text-indigo-400 font-bold uppercase tracking-widest">¬ÓÔÓÒ {gameState.currentIdx + 1}</p>
+               <p className="text-xl text-indigo-400 font-bold uppercase tracking-widest">–í–æ–ø—Ä–æ—Å {gameState.currentIdx + 1}</p>
             )}
           </div>
         </div>
         <div className="text-slate-500 font-black uppercase tracking-widest flex items-center gap-4">
-           <span>{onlineCount} ŒÕÀ¿…Õ</span>
+           <span>{onlineCount} –û–ù–õ–ê–ô–ù</span>
            <button onClick={toggleFullscreen} className="p-3 bg-white/5 rounded-xl"><Maximize2/></button>
         </div>
       </header>
@@ -135,7 +135,7 @@ const BigScreenView: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => 
           <div className="max-w-4xl mx-auto w-full space-y-8 animate-in zoom-in">
              <div className="text-center mb-8">
                <Trophy size={100} className="text-amber-500 mx-auto animate-bounce" />
-               <h1 className="text-6xl font-black text-white italic mt-4 uppercase">œŒ¡≈ƒ»“≈À»</h1>
+               <h1 className="text-6xl font-black text-white italic mt-4 uppercase">–ü–û–ë–ï–î–ò–¢–ï–õ–ò</h1>
              </div>
              {(gameState.gameType === GameType.PUSH_IT ? 
                Object.entries(raceProgress).map(([name, score]) => ({name, score: Number(score)})).sort((a,b) => b.score - a.score).slice(0, 5) : 
@@ -152,7 +152,7 @@ const BigScreenView: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => 
           <>
             {gameState.isCountdown ? (
               <div className="text-center space-y-8 animate-in zoom-in">
-                <h1 className="text-6xl font-black text-indigo-500 uppercase tracking-widest">œ–»√Œ“Œ¬»“‹—ﬂ!</h1>
+                <h1 className="text-6xl font-black text-indigo-500 uppercase tracking-widest">–ü–†–ò–ì–û–¢–û–í–ò–¢–¨–°–Ø!</h1>
                 <div className="text-[300px] font-black text-white leading-none animate-pulse">{gameState.countdownValue}</div>
               </div>
             ) : (
@@ -175,7 +175,7 @@ const BigScreenView: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => 
 
                 {gameState.gameType === GameType.PUSH_IT && (
                   <div className="space-y-12">
-                    <h1 className="text-8xl font-black text-white text-center italic animate-bounce">∆Ã» ¡€—“–≈≈!</h1>
+                    <h1 className="text-8xl font-black text-white text-center italic animate-bounce">–ñ–ú–ò –ë–´–°–¢–†–ï–ï!</h1>
                     <div className="space-y-6">
                        {Object.entries(raceProgress).sort((a,b) => Number(b[1]) - Number(a[1])).slice(0, 5).map(([name, count]) => (
                          <div key={name} className="space-y-2">

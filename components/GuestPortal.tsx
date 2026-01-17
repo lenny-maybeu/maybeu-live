@@ -47,7 +47,7 @@ const GuestPortal: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => {
     const target = events.find((e: any) => e.code.toUpperCase() === eventCode.toUpperCase());
     
     if (!target || target.status === 'UPCOMING') {
-      setError('—обытие не активно');
+      setError('–°–Њ–±—Л—В–Є–µ –љ–µ –∞–Ї—В–Є–≤–љ–Њ');
       return;
     }
 
@@ -87,12 +87,12 @@ const GuestPortal: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => {
       <div className="flex-1 flex flex-col items-center justify-center p-6 bg-indigo-950">
         <div className="w-full max-w-sm space-y-8 text-center animate-in zoom-in">
           <Smartphone size={80} className="mx-auto text-white opacity-20" />
-          <h1 className="text-4xl font-black text-white italic uppercase">¬ход в игру</h1>
+          <h1 className="text-4xl font-black text-white italic uppercase">–Т—Е–Њ–і –≤ –Є–≥—А—Г</h1>
           <div className="space-y-4">
-            <input placeholder=" ќƒ —ќЅџ“»я" value={eventCode} onChange={e => setEventCode(e.target.value.toUpperCase())} className="w-full bg-indigo-900 border-2 border-indigo-400/30 rounded-2xl px-6 py-4 text-white text-xl font-mono font-bold uppercase outline-none focus:border-white" />
-            <input placeholder="¬јЎ≈ »ћя" value={name} onChange={e => setName(e.target.value)} className="w-full bg-indigo-900 border-2 border-indigo-400/30 rounded-2xl px-6 py-4 text-white text-xl font-bold outline-none focus:border-white" />
+            <input placeholder="–Ъ–Ю–Ф –°–Ю–С–Ђ–Ґ–Ш–ѓ" value={eventCode} onChange={e => setEventCode(e.target.value.toUpperCase())} className="w-full bg-indigo-900 border-2 border-indigo-400/30 rounded-2xl px-6 py-4 text-white text-xl font-mono font-bold uppercase outline-none focus:border-white" />
+            <input placeholder="–Т–Р–®–Х –Ш–Ь–ѓ" value={name} onChange={e => setName(e.target.value)} className="w-full bg-indigo-900 border-2 border-indigo-400/30 rounded-2xl px-6 py-4 text-white text-xl font-bold outline-none focus:border-white" />
             {error && <p className="text-rose-400 font-bold">{error}</p>}
-            <button onClick={handleJoin} className="w-full bg-white text-indigo-900 py-5 rounded-2xl text-2xl font-black shadow-xl active:scale-95 transition-all">ѕќ≈’јЋ»!</button>
+            <button onClick={handleJoin} className="w-full bg-white text-indigo-900 py-5 rounded-2xl text-2xl font-black shadow-xl active:scale-95 transition-all">–Я–Ю–Х–•–Р–Ы–Ш!</button>
           </div>
         </div>
       </div>
@@ -103,8 +103,8 @@ const GuestPortal: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-950 text-center space-y-4">
         <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center animate-pulse"><Smartphone className="text-white" size={40} /></div>
-        <h2 className="text-2xl font-black text-white italic">∆ƒ≈ћ ¬≈ƒ”ў≈√ќ...</h2>
-        <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">—коро начнетс€ интерактив</p>
+        <h2 className="text-2xl font-black text-white italic">–Ц–Ф–Х–Ь –Т–Х–Ф–£–©–Х–У–Ю...</h2>
+        <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">–°–Ї–Њ—А–Њ –љ–∞—З–љ–µ—В—Б—П –Є–љ—В–µ—А–∞–Ї—В–Є–≤</p>
       </div>
     );
   }
@@ -126,8 +126,8 @@ const GuestPortal: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => {
         <div className="h-full flex flex-col items-center justify-center space-y-12">
           {gameState.isCountdown ? <div className="text-8xl font-black text-white animate-pulse">{gameState.countdownValue}</div> : (
             <>
-              <div className="text-center"><h2 className="text-3xl font-black text-white italic mb-2">∆ћ» Ѕџ—“–≈≈!</h2><div className="text-6xl font-black text-blue-400">{pushCount}/50</div></div>
-              <button onClick={handlePush} disabled={pushCount >= 50} className="w-64 h-64 bg-blue-600 rounded-full flex items-center justify-center shadow-2xl active:scale-90 border-8 border-white/20 text-white text-4xl font-black">∆ћ»!</button>
+              <div className="text-center"><h2 className="text-3xl font-black text-white italic mb-2">–Ц–Ь–Ш –С–Ђ–°–Ґ–†–Х–Х!</h2><div className="text-6xl font-black text-blue-400">{pushCount}/50</div></div>
+              <button onClick={handlePush} disabled={pushCount >= 50} className="w-64 h-64 bg-blue-600 rounded-full flex items-center justify-center shadow-2xl active:scale-90 border-8 border-white/20 text-white text-4xl font-black">–Ц–Ь–Ш!</button>
             </>
           )}
         </div>
@@ -135,11 +135,11 @@ const GuestPortal: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => {
 
       {gameState.gameType === GameType.IMAGE_GEN && (
         <div className="space-y-6">
-           <div className="bg-amber-500/10 p-6 rounded-3xl border border-amber-500/20"><h2 className="text-2xl font-black text-white italic uppercase tracking-tighter">»» ј–“-Ѕ»“¬ј</h2></div>
-           <textarea value={imagePrompt} onChange={e => setImagePrompt(e.target.value)} placeholder="„то нарисовать?" className="w-full bg-indigo-900 border-2 border-indigo-400/30 rounded-2xl p-6 text-white text-lg font-bold outline-none h-32" />
+           <div className="bg-amber-500/10 p-6 rounded-3xl border border-amber-500/20"><h2 className="text-2xl font-black text-white italic uppercase tracking-tighter">–Ш–Ш –Р–†–Ґ-–С–Ш–Ґ–Т–Р</h2></div>
+           <textarea value={imagePrompt} onChange={e => setImagePrompt(e.target.value)} placeholder="–І—В–Њ –љ–∞—А–Є—Б–Њ–≤–∞—В—М?" className="w-full bg-indigo-900 border-2 border-indigo-400/30 rounded-2xl p-6 text-white text-lg font-bold outline-none h-32" />
            <button onClick={handleCreateArt} disabled={isGenerating || isImageSent} className="w-full bg-white text-indigo-950 py-5 rounded-2xl text-2xl font-black shadow-xl flex items-center justify-center gap-3">
              {isGenerating ? <Loader2 className="animate-spin" /> : <Sparkles className="text-amber-500" />}
-             {isImageSent ? 'ќ“ѕ–ј¬Ћ≈Ќќ!' : '–»—ќ¬ј“№!'}
+             {isImageSent ? '–Ю–Ґ–Я–†–Р–Т–Ы–Х–Э–Ю!' : '–†–Ш–°–Ю–Т–Р–Ґ–ђ!'}
            </button>
         </div>
       )}
