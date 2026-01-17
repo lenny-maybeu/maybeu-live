@@ -1,6 +1,6 @@
 export type UserRole = 'HOST' | 'GUEST' | 'SCREEN';
 export type Language = 'ru' | 'en';
-export type GameType = 'quiz' | 'voting' | 'believe_not';
+export type GameType = 'quiz' | 'believe_not' | 'voting';
 
 export interface QuizQuestion {
   id: string;
@@ -14,11 +14,8 @@ export interface LiveEvent {
   title: string;
   isActive: boolean;
   currentStage: 'waiting' | 'quiz' | 'voting' | 'results';
+  gameType: GameType; // Мы добавили это поле
   questions?: QuizQuestion[];
   scores?: Record<string, number>;
-  // Добавляем поля для совместимости со старым кодом:
   code?: string;
-  name?: string;
-  date?: string;
-  status?: string;
 }
