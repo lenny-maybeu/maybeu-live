@@ -1,80 +1,150 @@
-import React from 'react';
-import { LiveEvent, Language } from '../types';
-import { User, Check } from 'lucide-react';
+
+import React, { useState, useEffect, useRef } from 'react';
+import { LiveEvent, GameType, Language } from '../types';
+import { Smartphone, Send, Zap, Loader2, Sparkles, CheckCircle2, Clock, Camera, Trash2 } from 'lucide-react';
+import { generateAiImage } from '../services/geminiService';
+import { FirebaseService } from '../services/firebase';
 
 interface Props {
   activeEvent: LiveEvent | null;
   lang: Language;
 }
 
-const GuestPortal: React.FC<Props> = ({ activeEvent, lang }) => {
-  if (!activeEvent || !activeEvent.isActive) {
+const GuestPortal: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => {
+  const [gameState, setGameState] = useState<any>(null);
+  const [isJoined, setIsJoined] = useState(false);
+  const [name, setName] = useState('');
+  const [eventCode, setEventCode] = useState('');
+  const [error, setError] = useState('');
+  const [pushCount, setPushCount] = useState(0);
+  const [imagePrompt, setImagePrompt] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [isImageSent, setIsImageSent] = useState(false);
+  const [answerSubmitted, setAnswerSubmitted] = useState<number | null>(null);
+  const [questionStartTime, setQuestionStartTime] = useState<number>(0);
+
+  useEffect(() => {
+    if (isJoined && eventCode) {
+      const unsub = FirebaseService.onGameStateChange(eventCode, (state) => {
+        if (state) {
+          setGameState(prev => {
+            if (prev?.currentIdx !== state.currentIdx || prev?.gameType !== state.gameType) {
+              setAnswerSubmitted(null);
+              setQuestionStartTime(Date.now());
+              if (state.gameType === GameType.PUSH_IT) setPushCount(0);
+            }
+            return state;
+          });
+        }
+      });
+      return () => unsub();
+    }
+  }, [isJoined, eventCode]);
+
+  const handleJoin = async () => {
+    if (!name.trim() || !eventCode.trim()) return;
+    const events = JSON.parse(localStorage.getItem('mc_events') || '[]');
+    const target = events.find((e: any) => e.code.toUpperCase() === eventCode.toUpperCase());
+    
+    if (!target || target.status === 'UPCOMING') {
+      setError('Событие не активно');
+      return;
+    }
+
+    await FirebaseService.registerGuest(eventCode, name);
+    setIsJoined(true);
+  };
+
+  const submitAnswer = async (value: number) => {
+    if (answerSubmitted !== null || !gameState) return;
+    const timeTaken = Date.now() - questionStartTime;
+    setAnswerSubmitted(value);
+    await FirebaseService.submitAnswer(eventCode, 'quiz', gameState.currentIdx, name, { value, timeTaken, name });
+    if (window.navigator.vibrate) window.navigator.vibrate(50);
+  };
+
+  const handlePush = async () => {
+    if (pushCount >= 50 || gameState?.isCountdown) return;
+    const nc = pushCount + 1;
+    setPushCount(nc);
+    await FirebaseService.updatePushProgress(eventCode, name, nc);
+    if (window.navigator.vibrate) window.navigator.vibrate(20);
+  };
+
+  const handleCreateArt = async () => {
+    if (!imagePrompt.trim()) return;
+    setIsGenerating(true);
+    const url = await generateAiImage(imagePrompt);
+    if (url) {
+      await FirebaseService.addGuestImage(eventCode, { url, user: name, timestamp: Date.now() });
+      setIsImageSent(true);
+    }
+    setIsGenerating(false);
+  };
+
+  if (!isJoined) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center p-6 text-center text-white">
-        <div className="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mb-6">
-          <User size={40} className="text-slate-400" />
+      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-indigo-950">
+        <div className="w-full max-w-sm space-y-8 text-center animate-in zoom-in">
+          <Smartphone size={80} className="mx-auto text-white opacity-20" />
+          <h1 className="text-4xl font-black text-white italic uppercase">Вход в игру</h1>
+          <div className="space-y-4">
+            <input placeholder="КОД СОБЫТИЯ" value={eventCode} onChange={e => setEventCode(e.target.value.toUpperCase())} className="w-full bg-indigo-900 border-2 border-indigo-400/30 rounded-2xl px-6 py-4 text-white text-xl font-mono font-bold uppercase outline-none focus:border-white" />
+            <input placeholder="ВАШЕ ИМЯ" value={name} onChange={e => setName(e.target.value)} className="w-full bg-indigo-900 border-2 border-indigo-400/30 rounded-2xl px-6 py-4 text-white text-xl font-bold outline-none focus:border-white" />
+            {error && <p className="text-rose-400 font-bold">{error}</p>}
+            <button onClick={handleJoin} className="w-full bg-white text-indigo-900 py-5 rounded-2xl text-2xl font-black shadow-xl active:scale-95 transition-all">ПОЕХАЛИ!</button>
+          </div>
         </div>
-        <h2 className="text-xl font-bold mb-2">
-          {lang === 'ru' ? 'Ждем ведущего...' : 'Waiting for host...'}
-        </h2>
-        <p className="text-slate-500 text-sm">
-          {lang === 'ru' ? 'Игра скоро начнется' : 'Game will start soon'}
-        </p>
       </div>
     );
   }
 
-  if (activeEvent.currentStage === 'waiting') {
+  if (!gameState || !gameState.isActive) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center p-6 bg-indigo-950 text-white">
-        <h1 className="text-4xl font-black mb-2">{activeEvent.code}</h1>
-        <p className="text-indigo-300 uppercase tracking-widest text-xs font-bold mb-8">
-          {lang === 'ru' ? 'Вы в игре!' : 'You are in!'}
-        </p>
-        <div className="w-full max-w-xs bg-indigo-900/50 p-6 rounded-2xl border border-indigo-500/30">
-          <p className="text-center text-indigo-200">
-            {lang === 'ru' ? 'Смотрите на большой экран' : 'Look at the big screen'}
-          </p>
-        </div>
+      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-slate-950 text-center space-y-4">
+        <div className="w-20 h-20 bg-indigo-600 rounded-3xl flex items-center justify-center animate-pulse"><Smartphone className="text-white" size={40} /></div>
+        <h2 className="text-2xl font-black text-white italic">ЖДЕМ ВЕДУЩЕГО...</h2>
+        <p className="text-slate-500 font-bold uppercase tracking-widest text-xs">Скоро начнется интерактив</p>
       </div>
     );
   }
 
-  if (activeEvent.currentStage === 'quiz' && activeEvent.questions && activeEvent.questions.length > 0) {
-    const question = activeEvent.questions[0];
-    return (
-      <div className="min-h-screen p-4 flex flex-col justify-end pb-12">
-        <div className="mb-auto pt-8">
-           <h3 className="text-white text-xl font-bold leading-snug">
-             {question.question}
-           </h3>
+  return (
+    <div className="flex-1 flex flex-col p-6 bg-indigo-950">
+      {(gameState.gameType === GameType.QUIZ || gameState.gameType === GameType.BELIEVE_NOT) && (
+        <div className="space-y-6">
+           <div className="bg-white/10 p-6 rounded-3xl border border-white/20"><h2 className="text-2xl font-bold text-white">{gameState.questions[gameState.currentIdx]?.question}</h2></div>
+           <div className="grid gap-4">
+              {gameState.questions[gameState.currentIdx]?.options.map((opt: string, i: number) => (
+                <button key={i} onClick={() => submitAnswer(i)} disabled={answerSubmitted !== null} className={`py-8 rounded-3xl text-xl font-black transition-all active:scale-95 border-b-8 ${answerSubmitted === i ? 'bg-amber-400 border-amber-600 text-amber-900' : 'bg-white text-indigo-900 border-indigo-200 opacity-90'}`}>{opt}</button>
+              ))}
+           </div>
         </div>
-        <div className="grid grid-cols-1 gap-3">
-          {question.options.map((opt, idx) => (
-            <button key={idx} className="bg-slate-800 hover:bg-indigo-600 text-white p-6 rounded-xl font-bold text-lg transition-all text-left flex items-center justify-between group active:scale-95">
-              <span>{opt}</span>
-              <div className="w-8 h-8 rounded-full border-2 border-slate-600 group-hover:border-white group-hover:bg-white/20"></div>
-            </button>
-          ))}
-        </div>
-      </div>
-    );
-  }
+      )}
 
-  if (activeEvent.currentStage === 'results') {
-    return (
-      <div className="h-screen flex flex-col items-center justify-center bg-emerald-900 text-white">
-        <div className="bg-emerald-500 rounded-full p-6 mb-6">
-          <Check size={48} className="text-white" />
+      {gameState.gameType === GameType.PUSH_IT && (
+        <div className="h-full flex flex-col items-center justify-center space-y-12">
+          {gameState.isCountdown ? <div className="text-8xl font-black text-white animate-pulse">{gameState.countdownValue}</div> : (
+            <>
+              <div className="text-center"><h2 className="text-3xl font-black text-white italic mb-2">ЖМИ БЫСТРЕЕ!</h2><div className="text-6xl font-black text-blue-400">{pushCount}/50</div></div>
+              <button onClick={handlePush} disabled={pushCount >= 50} className="w-64 h-64 bg-blue-600 rounded-full flex items-center justify-center shadow-2xl active:scale-90 border-8 border-white/20 text-white text-4xl font-black">ЖМИ!</button>
+            </>
+          )}
         </div>
-        <h2 className="text-2xl font-bold">
-          {lang === 'ru' ? 'Время вышло!' : 'Time is up!'}
-        </h2>
-      </div>
-    );
-  }
+      )}
 
-  return null;
+      {gameState.gameType === GameType.IMAGE_GEN && (
+        <div className="space-y-6">
+           <div className="bg-amber-500/10 p-6 rounded-3xl border border-amber-500/20"><h2 className="text-2xl font-black text-white italic uppercase tracking-tighter">ИИ АРТ-БИТВА</h2></div>
+           <textarea value={imagePrompt} onChange={e => setImagePrompt(e.target.value)} placeholder="Что нарисовать?" className="w-full bg-indigo-900 border-2 border-indigo-400/30 rounded-2xl p-6 text-white text-lg font-bold outline-none h-32" />
+           <button onClick={handleCreateArt} disabled={isGenerating || isImageSent} className="w-full bg-white text-indigo-950 py-5 rounded-2xl text-2xl font-black shadow-xl flex items-center justify-center gap-3">
+             {isGenerating ? <Loader2 className="animate-spin" /> : <Sparkles className="text-amber-500" />}
+             {isImageSent ? 'ОТПРАВЛЕНО!' : 'РИСОВАТЬ!'}
+           </button>
+        </div>
+      )}
+    </div>
+  );
 };
 
 export default GuestPortal;

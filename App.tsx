@@ -1,9 +1,6 @@
-// App.tsx
+
 import React, { useState, useEffect } from 'react';
 import { UserRole, LiveEvent, Language } from './types';
-// Импортируем функции связи (убедитесь, что файл firebase.ts создан в папке services)
-import { subscribeToGameState, updateGameState, resetGame } from './services/firebase';
-
 import HostDashboard from './components/HostDashboard';
 import GuestPortal from './components/GuestPortal';
 import BigScreenView from './components/BigScreenView';
@@ -20,7 +17,7 @@ const TRANSLATIONS = {
     russian: 'Русский',
     english: 'English',
     close: 'Закрыть',
-    sync: 'Синхронизация',
+    sync: 'Cloud Sync',
     appTitle: 'Maybeu Live',
     exit: 'Выйти',
   },
@@ -33,7 +30,7 @@ const TRANSLATIONS = {
     russian: 'Русский',
     english: 'English',
     close: 'Close',
-    sync: 'Sync',
+    sync: 'Cloud Sync',
     appTitle: 'Maybeu Live',
     exit: 'Exit',
   }
@@ -41,46 +38,25 @@ const TRANSLATIONS = {
 
 const App: React.FC = () => {
   const [role, setRole] = useState<UserRole | null>(null);
-  const [activeEvent, setActiveEvent] = useState<LiveEvent | null>(null);
+  const [activeEvent, setActiveEvent] = useState<LiveEvent | null>(() => {
+    const saved = localStorage.getItem('active_event');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [lang, setLang] = useState<Language>('ru');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
 
   const t = TRANSLATIONS[lang];
 
-  // ГЛАВНОЕ ИЗМЕНЕНИЕ: Подключаемся к Firebase при запуске
-  useEffect(() => {
-    // Эта функция запустится, когда придут данные из интернета
-    const handleServerUpdate = (data: any) => {
-      if (data && data.activeEvent) {
-        setActiveEvent(data.activeEvent);
-        setIsConnected(true);
-      } else {
-        // Если база пустая, значит события нет
-        setActiveEvent(null);
-      }
-    };
-
-    subscribeToGameState(handleServerUpdate);
-  }, []);
-
-  // Когда ведущий меняет состояние, отправляем это в интернет
-  const handleEventChange = (newEvent: LiveEvent | null) => {
-    // Сначала обновляем локально (чтобы было быстро)
-    setActiveEvent(newEvent);
-    // Потом отправляем всем остальным
-    updateGameState(newEvent);
-  };
-
   const handleExit = () => {
+    localStorage.removeItem('active_event');
     setRole(null);
-    // Не сбрасываем игру в базе при выходе, только локально!
+    setActiveEvent(null);
   };
 
   const renderContent = () => {
     switch (role) {
       case 'HOST':
-        return <HostDashboard setActiveEvent={handleEventChange} activeEvent={activeEvent} lang={lang} />;
+        return <HostDashboard setActiveEvent={setActiveEvent} activeEvent={activeEvent} lang={lang} />;
       case 'GUEST':
         return <GuestPortal activeEvent={activeEvent} lang={lang} />;
       case 'SCREEN':
@@ -109,7 +85,6 @@ const App: React.FC = () => {
             <button 
               onClick={handleExit}
               className="p-2 bg-slate-800 hover:bg-rose-500/20 hover:text-rose-500 rounded-xl text-slate-400 transition-all flex items-center gap-2 px-3 py-1.5 font-bold text-xs uppercase"
-              title={t.exit}
             >
               <Home size={16} /> {t.exit}
             </button>
@@ -121,7 +96,7 @@ const App: React.FC = () => {
         {renderContent()}
       </main>
 
-      {/* Модальное окно настроек */}
+      {/* Settings Modal */}
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-6 shadow-2xl animate-in zoom-in-95 duration-200">
@@ -167,11 +142,10 @@ const App: React.FC = () => {
         </div>
       )}
 
-      {/* Индикатор статуса */}
       {role && (
-        <div className={`fixed bottom-4 right-4 text-[10px] uppercase tracking-widest font-black flex items-center gap-2 px-3 py-1 rounded-full border ${isConnected ? 'text-emerald-500 bg-emerald-500/10 border-emerald-500/20' : 'text-amber-500 bg-amber-500/10 border-amber-500/20'}`}>
-          <div className={`w-2 h-2 rounded-full ${isConnected ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`}></div>
-          {isConnected ? 'ONLINE' : 'CONNECTING...'}
+        <div className="fixed bottom-4 right-4 text-[10px] text-emerald-500 uppercase tracking-widest font-black flex items-center gap-2 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+          {t.sync}: CLOUD READY
         </div>
       )}
     </div>

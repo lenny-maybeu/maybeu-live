@@ -1,8 +1,10 @@
-import React, { useState } from 'react';
-import { LiveEvent, Language, GameType } from '../types';
-import { updateGameState } from '../services/firebase';
+
+import React, { useState, useEffect } from 'react';
+import { LiveEvent, GameType, Language, TimingItem } from '../types';
+import { Plus, Users, Calendar, Gamepad2, Database, Edit2, Trash2, Info, ListTodo, MonitorCheck, MonitorOff, Check, X } from 'lucide-react';
 import QuizControl from './QuizControl';
-import { Settings, Play, StopCircle, Brain, ThumbsUp, Activity } from 'lucide-react';
+import CRMView from './CRMView';
+import { FirebaseService } from '../services/firebase';
 
 interface Props {
   activeEvent: LiveEvent | null;
@@ -10,106 +12,133 @@ interface Props {
   lang: Language;
 }
 
+const TRANSLATIONS = {
+  ru: {
+    upcoming: 'События', create: 'Создать', manage: 'Игры', clients: 'Клиенты', infoTab: 'План', timingTab: 'Сценарий', eventsTab: 'Список',
+    live: 'В ЭФИРЕ', soon: 'СКОРО', guests: 'гостей', code: 'Код', createTitle: 'Новое событие', editTitle: 'Правка', save: 'ОК', cancel: 'Отмена',
+    goLive: 'ВЫЙТИ В ЭФИР', stopLive: 'ЗАВЕРШИТЬ ЭФИР', screenStatus: 'Экран', screenReady: 'ОНЛАЙН', screenOffline: 'ОФФЛАЙН'
+  },
+  en: {
+    upcoming: 'Events', create: 'Create', manage: 'Games', clients: 'Clients', infoTab: 'Planner', timingTab: 'Timeline', eventsTab: 'List',
+    live: 'LIVE', soon: 'SOON', guests: 'guests', code: 'Code', createTitle: 'New Event', editTitle: 'Edit', save: 'Save', cancel: 'Cancel',
+    goLive: 'GO LIVE', stopLive: 'STOP LIVE', screenStatus: 'Screen', screenReady: 'ONLINE', screenOffline: 'OFFLINE'
+  }
+};
+
 const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) => {
-  const [topic, setTopic] = useState('');
-  const [selectedMode, setSelectedMode] = useState<GameType>('quiz');
+  const [tab, setTab] = useState<'EVENTS' | 'GAMES' | 'CRM' | 'INFO' | 'TIMING'>('EVENTS');
+  const [events, setEvents] = useState<LiveEvent[]>(() => JSON.parse(localStorage.getItem('mc_events') || '[]'));
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<LiveEvent | null>(null);
+  const [formData, setFormData] = useState<Partial<LiveEvent>>({ name: '', type: 'PARTY', code: '', date: new Date().toISOString().split('T')[0] });
+  const [isScreenConnected, setIsScreenConnected] = useState(false);
+  const [guestCount, setGuestCount] = useState(0);
 
-  const createEvent = () => {
-    const newEvent: LiveEvent = {
-      id: Date.now().toString(),
-      title: topic || (lang === 'ru' ? 'Новое событие' : 'New Event'),
-      isActive: true,
-      currentStage: 'waiting',
-      gameType: selectedMode,
-      code: Math.floor(1000 + Math.random() * 9000).toString(),
-      questions: []
-    };
-    setActiveEvent(newEvent);
-    updateGameState(newEvent);
+  const t = TRANSLATIONS[lang];
+
+  useEffect(() => {
+    localStorage.setItem('mc_events', JSON.stringify(events));
+  }, [events]);
+
+  // Мониторинг пульса экрана и количества гостей через Firebase
+  useEffect(() => {
+    if (activeEvent?.status === 'LIVE') {
+      const unsubPulse = FirebaseService.onScreenPulseChange(activeEvent.code, (timestamp) => {
+        setIsScreenConnected(Date.now() - timestamp < 3000);
+      });
+      const unsubGuests = FirebaseService.onGuestsCountChange(activeEvent.code, setGuestCount);
+      return () => { unsubPulse(); unsubGuests(); };
+    }
+  }, [activeEvent?.code, activeEvent?.status]);
+
+  const handleSaveEvent = () => {
+    if (editingEvent) {
+      setEvents(prev => prev.map(e => e.id === editingEvent.id ? { ...e, ...formData } as LiveEvent : e));
+    } else {
+      const event: LiveEvent = {
+        id: Math.random().toString(36).substr(2, 9),
+        name: formData.name || 'Event',
+        date: formData.date || '',
+        code: formData.code || Math.random().toString(36).substr(2, 6).toUpperCase(),
+        type: 'PARTY',
+        status: 'UPCOMING',
+        timetable: []
+      };
+      setEvents(prev => [event, ...prev]);
+    }
+    setIsModalOpen(false);
   };
 
-  const stopEvent = () => {
-    setActiveEvent(null);
-    updateGameState(null);
+  const handleToggleLive = () => {
+    if (!activeEvent) return;
+    const newStatus = activeEvent.status === 'LIVE' ? 'COMPLETED' : 'LIVE';
+    const updated = { ...activeEvent, status: newStatus as any };
+    setActiveEvent(updated);
+    setEvents(prev => prev.map(e => e.id === activeEvent.id ? updated : e));
+    localStorage.setItem('active_event', JSON.stringify(updated));
   };
 
-  if (activeEvent) {
-    return (
-      <div className="p-6 max-w-4xl mx-auto">
-        <div className="bg-slate-900 rounded-2xl p-6 border border-slate-800 mb-6 flex justify-between items-center shadow-lg">
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-               <h1 className="text-2xl font-bold text-white">{activeEvent.title}</h1>
-               <span className="bg-indigo-500/20 text-indigo-300 text-xs px-2 py-1 rounded border border-indigo-500/30 uppercase font-bold">
-                 {activeEvent.gameType === 'believe_not' ? (lang === 'ru' ? 'Верю / Не верю' : 'Believe/Not') : 'Quiz'}
+  return (
+    <div className="flex flex-col h-full bg-slate-950 overflow-hidden">
+      <div className="flex border-b border-slate-800 bg-slate-900/30 overflow-x-auto shrink-0">
+        {['EVENTS', 'INFO', 'TIMING', 'GAMES', 'CRM'].map(id => (
+          <button key={id} onClick={() => setTab(id as any)} className={`flex-1 py-4 text-[10px] font-black uppercase tracking-widest border-b-2 transition-all ${tab === id ? 'border-indigo-500 text-white' : 'border-transparent text-slate-500'}`}>
+            {t[(id.toLowerCase() + 'Tab') as keyof typeof t] || t[id.toLowerCase() as keyof typeof t]}
+          </button>
+        ))}
+      </div>
+
+      <div className="bg-slate-900/50 px-6 py-2 border-b border-slate-800 flex justify-between items-center">
+         <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+               {isScreenConnected ? <MonitorCheck size={14} className="text-emerald-500" /> : <MonitorOff size={14} className="text-slate-600" />}
+               <span className={`text-[9px] font-black uppercase tracking-widest ${isScreenConnected ? 'text-emerald-500' : 'text-slate-600'}`}>
+                  {t.screenStatus}: {isScreenConnected ? t.screenReady : t.screenOffline}
                </span>
             </div>
-            <p className="text-emerald-400 text-sm font-mono flex items-center gap-2">
-              <span className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"/>
-              LIVE — CODE: <span className="text-xl font-bold text-white">{activeEvent.code}</span>
-            </p>
+            {activeEvent?.status === 'LIVE' && <div className="text-[9px] font-black text-indigo-400 uppercase">Гостей: {guestCount}</div>}
+         </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto p-4 md:p-8">
+        {tab === 'EVENTS' && (
+          <div className="max-w-4xl mx-auto space-y-6">
+            <div className="flex justify-between items-center"><h2 className="text-3xl font-black text-white italic">{t.upcoming}</h2><button onClick={() => setIsModalOpen(true)} className="bg-white text-indigo-900 px-6 py-2 rounded-xl font-black shadow-xl">+</button></div>
+            <div className="grid gap-4">
+              {events.map(event => (
+                <div key={event.id} onClick={() => { setActiveEvent(event); localStorage.setItem('active_event', JSON.stringify(event)); }} className={`bg-slate-900 border-2 p-5 rounded-2xl cursor-pointer transition-all ${activeEvent?.id === event.id ? 'border-indigo-500' : 'border-slate-800'}`}>
+                  <div className="flex justify-between items-start">
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase ${event.status === 'LIVE' ? 'bg-rose-600 text-white animate-pulse' : 'bg-slate-800 text-slate-400'}`}>{event.status === 'LIVE' ? t.live : t.soon}</span>
+                    <span className="text-slate-500 text-sm">{event.date}</span>
+                  </div>
+                  <h3 className="text-2xl font-black text-white mt-4">{event.name} — <span className="text-indigo-400 font-mono">{event.code}</span></h3>
+                </div>
+              ))}
+            </div>
           </div>
-          <button 
-            onClick={stopEvent}
-            className="bg-rose-500/10 text-rose-500 hover:bg-rose-500 hover:text-white px-4 py-3 rounded-xl font-bold transition-all flex items-center gap-2 border border-rose-500/20"
-          >
-            <StopCircle size={20} />
-            {lang === 'ru' ? 'Завершить' : 'Stop Event'}
-          </button>
-        </div>
-
-        {/* Подключаем умный контроллер */}
-        <QuizControl activeEvent={activeEvent} lang={lang} />
+        )}
+        {tab === 'INFO' && activeEvent && (
+          <div className="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-right-4">
+            <div className="bg-slate-900 p-8 rounded-[40px] border border-slate-800 flex justify-between items-center">
+              <div><h2 className="text-3xl font-black text-white italic">{activeEvent.name}</h2><p className="text-slate-400 font-mono">{activeEvent.code}</p></div>
+              <button onClick={handleToggleLive} className={`px-8 py-4 rounded-2xl font-black text-lg ${activeEvent.status === 'LIVE' ? 'bg-rose-600' : 'bg-emerald-600'} text-white shadow-2xl`}>{activeEvent.status === 'LIVE' ? t.stopLive : t.goLive}</button>
+            </div>
+          </div>
+        )}
+        {tab === 'GAMES' && activeEvent && <QuizControl activeEvent={activeEvent} lang={lang} />}
+        {tab === 'CRM' && <CRMView lang={lang} />}
       </div>
-    );
-  }
 
-  // Экран создания события (выбор режима)
-  return (
-    <div className="flex flex-col items-center justify-center min-h-[70vh] p-4 text-center">
-      <div className="bg-slate-900 p-8 rounded-3xl border border-slate-800 shadow-2xl max-w-lg w-full">
-        <h2 className="text-3xl font-bold mb-2 text-white">
-          {lang === 'ru' ? 'Панель Ведущего' : 'Host Dashboard'}
-        </h2>
-        <p className="text-slate-400 mb-8">
-          {lang === 'ru' ? 'Выберите режим и тему игры' : 'Choose game mode and topic'}
-        </p>
-
-        {/* Выбор режима */}
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <button 
-            onClick={() => setSelectedMode('quiz')}
-            className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 ${selectedMode === 'quiz' ? 'border-indigo-500 bg-indigo-500/10 text-white' : 'border-slate-800 text-slate-500 hover:border-slate-700'}`}
-          >
-            <Brain size={32} className={selectedMode === 'quiz' ? 'text-indigo-400' : ''} />
-            <span className="font-bold">{lang === 'ru' ? 'Викторина' : 'Quiz'}</span>
-          </button>
-
-          <button 
-            onClick={() => setSelectedMode('believe_not')}
-            className={`p-4 rounded-xl border-2 transition-all flex flex-col items-center gap-2 ${selectedMode === 'believe_not' ? 'border-indigo-500 bg-indigo-500/10 text-white' : 'border-slate-800 text-slate-500 hover:border-slate-700'}`}
-          >
-            <ThumbsUp size={32} className={selectedMode === 'believe_not' ? 'text-indigo-400' : ''} />
-            <span className="font-bold">{lang === 'ru' ? 'Верю / Не верю' : 'Fact Check'}</span>
-          </button>
+      {isModalOpen && (
+        <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-3xl p-8 space-y-4">
+            <h2 className="text-2xl font-black text-white italic">Новое событие</h2>
+            <input placeholder="Название" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white" />
+            <input placeholder="Код (LOVE24)" value={formData.code} onChange={e => setFormData({...formData, code: e.target.value.toUpperCase()})} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white font-mono" />
+            <div className="flex gap-4"><button onClick={() => setIsModalOpen(false)} className="flex-1 bg-slate-800 py-4 rounded-xl text-white font-black uppercase text-xs">Отмена</button><button onClick={handleSaveEvent} className="flex-1 bg-indigo-600 py-4 rounded-xl text-white font-black uppercase text-xs">Сохранить</button></div>
+          </div>
         </div>
-        
-        <input 
-          type="text" 
-          placeholder={lang === 'ru' ? 'Тема игры (например: История Таджикистана)' : 'Game topic...'}
-          className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-4 mb-6 focus:ring-2 focus:ring-indigo-500 outline-none transition-all text-lg"
-          value={topic}
-          onChange={(e) => setTopic(e.target.value)}
-        />
-        
-        <button 
-          onClick={createEvent}
-          className="w-full bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2 text-lg shadow-lg shadow-indigo-500/20"
-        >
-          <Play size={24} />
-          {lang === 'ru' ? 'Запустить Игру' : 'Start Game'}
-        </button>
-      </div>
+      )}
     </div>
   );
 };
