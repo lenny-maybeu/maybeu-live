@@ -16,15 +16,21 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
+// Тип для функции отписки
+type Unsubscribe = () => void;
+
 export class FirebaseService {
   
-  static subscribeToGameState(callback: (data: any) => void) {
-    onValue(ref(db, 'gameState'), (snapshot) => callback(snapshot.val()));
+  // --- STATE ---
+  // Возвращаем функцию отписки (Unsubscribe), чтобы useEffect не падал
+  static subscribeToGameState(callback: (data: any) => void): Unsubscribe {
+    const unsub = onValue(ref(db, 'gameState'), (snapshot) => callback(snapshot.val()));
+    return unsub; 
   }
 
-  // Дублируем для совместимости, так как в разных файлах вы называли это по-разному
-  static onGameStateChange(callback: (data: any) => void) {
-    this.subscribeToGameState(callback);
+  // Принимаем любые доп. аргументы (...args), чтобы старый код не ломался
+  static onGameStateChange(callback: (data: any) => void, ...args: any[]): Unsubscribe {
+    return this.subscribeToGameState(callback);
   }
 
   static updateGameState(event: LiveEvent | null) {
@@ -35,53 +41,79 @@ export class FirebaseService {
     await set(ref(db, 'gameState'), null);
   }
   
-  static async resetEvent() {
+  // Принимаем аргументы, даже если не используем их
+  static async resetEvent(...args: any[]) {
     await this.resetGame();
   }
 
-  // --- Гости ---
-  static registerGuest(guestId: string, name: string) {
-    set(ref(db, `guests/${guestId}`), { name, joinedAt: Date.now(), score: 0 });
+  // --- GUESTS ---
+  // Используем ...args, чтобы принять и объект, и отдельные параметры
+  static registerGuest(...args: any[]) {
+    // Пробуем понять, что нам передали (id+name или объект)
+    let guestId, name;
+    if (typeof args[0] === 'object') {
+       guestId = args[0].id;
+       name = args[0].name;
+    } else {
+       guestId = args[0];
+       name = args[1];
+    }
+    if (guestId) {
+        set(ref(db, `guests/${guestId}`), { name, joinedAt: Date.now(), score: 0 });
+    }
   }
 
-  static onGuestsCountChange(callback: (count: number) => void) {
-    onValue(ref(db, 'guests'), (snapshot) => {
-      callback(snapshot.size);
-    });
+  static onGuestsCountChange(callback: (count: number) => void, ...args: any[]): Unsubscribe {
+    const unsub = onValue(ref(db, 'guests'), (snapshot) => callback(snapshot.size));
+    return unsub;
   }
 
-  // --- Экран и Пульс ---
-  static sendScreenPulse() {
+  // --- PULSE & PROGRESS ---
+  static sendScreenPulse(...args: any[]) {
     set(ref(db, 'screenPulse'), Date.now());
   }
 
-  static onScreenPulseChange(callback: (timestamp: number) => void) {
-    onValue(ref(db, 'screenPulse'), (snapshot) => callback(snapshot.val()));
+  static onScreenPulseChange(callback: (val: any) => void, ...args: any[]): Unsubscribe {
+    const unsub = onValue(ref(db, 'screenPulse'), (snapshot) => callback(snapshot.val()));
+    return unsub;
   }
 
-  static onPushProgressChange(callback: (val: any) => void) {
-    onValue(ref(db, 'pushProgress'), (snapshot) => callback(snapshot.val()));
+  static onPushProgressChange(callback: (val: any) => void, ...args: any[]): Unsubscribe {
+    const unsub = onValue(ref(db, 'pushProgress'), (snapshot) => callback(snapshot.val()));
+    return unsub;
   }
 
-  static updatePushProgress(val: number) {
+  static updatePushProgress(val: any, ...args: any[]) {
     set(ref(db, 'pushProgress'), val);
   }
 
-  // --- Ответы и Картинки ---
-  static submitAnswer(guestId: string, answerIdx: number) {
+  // --- ANSWERS & IMAGES ---
+  // Принимаем до 5 аргументов (как в ошибке)
+  static submitAnswer(...args: any[]) {
+    // Берем первые два как основные, остальное игнорируем
+    const guestId = args[0];
+    const answerIdx = args[1];
     const key = push(ref(db, 'answers')).key;
-    update(ref(db), { [`answers/${key}`]: { guestId, answerIdx } });
+    update(ref(db), { [`answers/${key}`]: { guestId, answerIdx, timestamp: Date.now() } });
   }
 
-  static onAnswersChange(callback: (data: any) => void) {
-    onValue(ref(db, 'answers'), (snapshot) => callback(snapshot.val()));
+  static onAnswersChange(callback: (data: any) => void, ...args: any[]): Unsubscribe {
+    const unsub = onValue(ref(db, 'answers'), (snapshot) => callback(snapshot.val()));
+    return unsub;
   }
 
-  static addGuestImage(guestId: string, imageUrl: string) {
-    push(ref(db, 'guestImages'), { guestId, imageUrl });
+  static addGuestImage(arg1: any, ...args: any[]) {
+    // Если передали объект {url, user...} или просто аргументы
+    const payload = typeof arg1 === 'object' ? arg1 : { guestId: arg1, imageUrl: args[0] };
+    push(ref(db, 'guestImages'), payload);
   }
 
-  static onImagesChange(callback: (data: any) => void) {
-    onValue(ref(db, 'guestImages'), (snapshot) => callback(snapshot.val()));
+  static onImagesChange(callback: (data: any) => void, ...args: any[]): Unsubscribe {
+    const unsub = onValue(ref(db, 'guestImages'), (snapshot) => callback(snapshot.val()));
+    return unsub;
   }
 }
+
+// Экспорты для совместимости
+export const updateGameState = FirebaseService.updateGameState;
+export const subscribeToGameState = FirebaseService.subscribeToGameState;

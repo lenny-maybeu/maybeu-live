@@ -1,4 +1,3 @@
-// ВАЖНО: Мы используем новую библиотеку @google/generative-ai вместо старой @google/genai
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { QuizQuestion, Language } from "../types";
 
@@ -6,10 +5,12 @@ const apiKey = process.env.API_KEY || '';
 const genAI = new GoogleGenerativeAI(apiKey);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
+// Добавляем ...args, чтобы принимать любые параметры (mood, difficulty и т.д.)
 export const generateQuizQuestions = async (
   topic: string, 
   lang: Language, 
-  count: number = 5
+  count: number = 5,
+  ...args: any[]
 ): Promise<QuizQuestion[]> => {
   try {
     const prompt = `Generate ${count} quiz questions about "${topic}". Language: ${lang}. 
@@ -27,7 +28,8 @@ export const generateQuizQuestions = async (
 export const generateBelieveNotQuestions = async (
   topic: string, 
   lang: Language, 
-  count: number = 5
+  count: number = 5,
+  ...args: any[]
 ): Promise<QuizQuestion[]> => {
   try {
     const prompt = `Generate ${count} True/False facts about "${topic}". Language: ${lang}.
