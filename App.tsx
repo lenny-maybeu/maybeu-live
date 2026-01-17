@@ -5,21 +5,21 @@ import HostDashboard from './components/HostDashboard';
 import GuestPortal from './components/GuestPortal';
 import BigScreenView from './components/BigScreenView';
 import LandingPage from './components/LandingPage';
-import { Settings, User, Monitor, PlayCircle, X, Globe, Home } from 'lucide-react';
+import { Settings, X, Globe, Home } from 'lucide-react';
 
 const TRANSLATIONS = {
   ru: {
-    host: 'Ведущий',
-    guest: 'Гость',
-    screen: 'Экран',
-    settings: 'Настройки',
-    language: 'Язык приложения',
-    russian: 'Русский',
+    host: '�������',
+    guest: '�����',
+    screen: '�����',
+    settings: '���������',
+    language: '���� ����������',
+    russian: '�������',
     english: 'English',
-    close: 'Закрыть',
-    sync: 'Синхронизация',
+    close: '�������',
+    sync: 'Cloud Sync',
     appTitle: 'Maybeu Live',
-    exit: 'Выйти',
+    exit: '�����',
   },
   en: {
     host: 'Host',
@@ -27,10 +27,10 @@ const TRANSLATIONS = {
     screen: 'Screen',
     settings: 'Settings',
     language: 'App Language',
-    russian: 'Русский',
+    russian: '�������',
     english: 'English',
     close: 'Close',
-    sync: 'Sync',
+    sync: 'Cloud Sync',
     appTitle: 'Maybeu Live',
     exit: 'Exit',
   }
@@ -38,36 +38,19 @@ const TRANSLATIONS = {
 
 const App: React.FC = () => {
   const [role, setRole] = useState<UserRole | null>(null);
-  const [activeEvent, setActiveEvent] = useState<LiveEvent | null>(null);
-  const [syncKey, setSyncKey] = useState(0);
+  const [activeEvent, setActiveEvent] = useState<LiveEvent | null>(() => {
+    const saved = localStorage.getItem('active_event');
+    return saved ? JSON.parse(saved) : null;
+  });
   const [lang, setLang] = useState<Language>('ru');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const t = TRANSLATIONS[lang];
 
-  useEffect(() => {
-    const handleStorageChange = () => {
-      setSyncKey(prev => prev + 1);
-    };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
-  }, []);
-
   const handleExit = () => {
-    // Очищаем ключи синхронизации экрана, но сохраняем mc_events и mc_crm_guests
     localStorage.removeItem('active_event');
-    localStorage.removeItem('game_state');
-    localStorage.removeItem('guest_images');
-    localStorage.removeItem('race_progress');
-    
-    // Сбрасываем локальное состояние приложения
     setRole(null);
     setActiveEvent(null);
-    
-    // Принудительно уведомляем другие вкладки
-    const channel = new BroadcastChannel('maybeu_sync');
-    channel.postMessage({ type: 'FORCE_RESET' });
-    channel.close();
   };
 
   const renderContent = () => {
@@ -102,7 +85,6 @@ const App: React.FC = () => {
             <button 
               onClick={handleExit}
               className="p-2 bg-slate-800 hover:bg-rose-500/20 hover:text-rose-500 rounded-xl text-slate-400 transition-all flex items-center gap-2 px-3 py-1.5 font-bold text-xs uppercase"
-              title={t.exit}
             >
               <Home size={16} /> {t.exit}
             </button>
@@ -161,8 +143,9 @@ const App: React.FC = () => {
       )}
 
       {role && (
-        <div className="fixed bottom-4 right-4 text-[10px] text-slate-600 uppercase tracking-widest font-mono">
-          {t.sync}: v.{syncKey}
+        <div className="fixed bottom-4 right-4 text-[10px] text-emerald-500 uppercase tracking-widest font-black flex items-center gap-2 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20">
+          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
+          {t.sync}: CLOUD READY
         </div>
       )}
     </div>
