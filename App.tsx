@@ -1,11 +1,11 @@
-
 import React, { useState, useEffect } from 'react';
 import { UserRole, LiveEvent, Language } from './types';
+import { FirebaseService } from './services/firebase'; // Импортируем наш сервис
 import HostDashboard from './components/HostDashboard';
 import GuestPortal from './components/GuestPortal';
 import BigScreenView from './components/BigScreenView';
 import LandingPage from './components/LandingPage';
-import { Settings, User, Monitor, PlayCircle, X, Globe, Home } from 'lucide-react';
+import { Settings, X, Globe, Home } from 'lucide-react';
 
 const TRANSLATIONS = {
   ru: {
@@ -39,35 +39,43 @@ const TRANSLATIONS = {
 const App: React.FC = () => {
   const [role, setRole] = useState<UserRole | null>(null);
   const [activeEvent, setActiveEvent] = useState<LiveEvent | null>(null);
-  const [syncKey, setSyncKey] = useState(0);
+  const [syncKey, setSyncKey] = useState(0); // Оставляем для совместимости, но теперь данные идут через Firebase
   const [lang, setLang] = useState<Language>('ru');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const t = TRANSLATIONS[lang];
 
+  // В новой версии нам не нужно слушать 'storage' событие для синхронизации вкладок,
+  // так как Firebase делает это через интернет.
+  // Но мы можем оставить проверку активной сессии при загрузке.
   useEffect(() => {
-    const handleStorageChange = () => {
-      setSyncKey(prev => prev + 1);
-    };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    const savedEvent = localStorage.getItem('active_event');
+    if (savedEvent) {
+      try {
+        const parsed = JSON.parse(savedEvent);
+        setActiveEvent(parsed);
+      } catch (e) {
+        console.error(e);
+      }
+    }
   }, []);
 
   const handleExit = () => {
-    // Очищаем ключи синхронизации экрана, но сохраняем mc_events и mc_crm_guests
+    // 1. Очищаем локальное хранилище
     localStorage.removeItem('active_event');
     localStorage.removeItem('game_state');
     localStorage.removeItem('guest_images');
     localStorage.removeItem('race_progress');
     
-    // Сбрасываем локальное состояние приложения
+    // 2. Если мы были ведущим, мы можем (опционально) сбросить статус в Firebase,
+    // но обычно лучше оставить это на кнопку "Завершить эфир" в Dashboard.
+    // Здесь мы просто выходим из интерфейса.
+    
+    // 3. Сбрасываем стейт приложения
     setRole(null);
     setActiveEvent(null);
     
-    // Принудительно уведомляем другие вкладки
-    const channel = new BroadcastChannel('maybeu_sync');
-    channel.postMessage({ type: 'FORCE_RESET' });
-    channel.close();
+    // BroadcastChannel больше не нужен, так как синхронизация идет через Firebase
   };
 
   const renderContent = () => {
@@ -161,8 +169,9 @@ const App: React.FC = () => {
       )}
 
       {role && (
-        <div className="fixed bottom-4 right-4 text-[10px] text-slate-600 uppercase tracking-widest font-mono">
-          {t.sync}: v.{syncKey}
+        <div className="fixed bottom-4 right-4 text-[10px] text-emerald-500 uppercase tracking-widest font-mono flex items-center gap-2">
+          <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
+          ONLINE (FIREBASE)
         </div>
       )}
     </div>
