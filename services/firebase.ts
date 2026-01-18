@@ -1,7 +1,6 @@
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref, update, get, onValue, push } from "firebase/database";
+import { getDatabase, ref, update, get, onValue, push, set, remove, child } from "firebase/database";
 
-// Твои рабочие ключи
 const firebaseConfig = {
   apiKey: "AIzaSyC-vmOaMUz_fBFjltcxp6RyNvyMmAmdqJ0",
   authDomain: "maybeu-live.firebaseapp.com",
@@ -17,19 +16,62 @@ const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
 export const FirebaseService = {
-  // Ведущий: отправляет событие в эфир
+  // --- ВЕДУЩИЙ ---
   syncEvent: (event: any) => {
     if (!event) return;
     update(ref(db, 'currentEvent'), event);
   },
 
-  // Ведущий: отправляет состояние игры (вопрос/слайд)
   syncGameState: (state: any) => {
     if (!state) return;
     update(ref(db, 'gameState'), state);
   },
 
-  // Гость: ищет событие по коду
+  resetGameData: (code: string) => {
+    // Очистка данных конкретной сессии
+    remove(ref(db, `session_data/${code}`));
+    set(ref(db, 'gameState'), { isActive: false });
+  },
+
+  // --- ГОСТЬ / ДЕЙСТВИЯ ---
+  
+  // Регистрация гостя
+  joinEvent: (code: string, name: string) => {
+    const userRef = ref(db, `session_data/${code}/registry/${name}`);
+    set(userRef, { name, timestamp: Date.now() });
+  },
+
+  // Отправка ответов (Квиз/Квест)
+  sendAnswer: (code: string, type: 'quiz' | 'quest', key: string | number, data: any) => {
+    // key - это номер вопроса или этапа
+    const path = type === 'quiz' 
+      ? `session_data/${code}/quiz_answers/${data.name}/${key}`
+      : `session_data/${code}/quest_responses/${key}`;
+    
+    if (type === 'quiz') {
+      set(ref(db, path), data);
+    } else {
+      push(ref(db, path), data);
+    }
+  },
+
+  // Отправка картинки
+  sendImage: (code: string, data: any) => {
+    push(ref(db, `session_data/${code}/images`), data);
+  },
+
+  // Гонка кликов
+  updateRaceProgress: (code: string, name: string, count: number) => {
+    set(ref(db, `session_data/${code}/race/${name}`), count);
+  },
+
+  // Отправка лидов (CRM)
+  sendLead: (lead: any) => {
+    push(ref(db, 'crm_leads'), lead);
+  },
+
+  // --- ПОДПИСКИ (LISTENERS) ---
+
   findEventByCode: async (code: string) => {
     try {
       const snapshot = await get(ref(db, 'currentEvent'));
@@ -39,16 +81,25 @@ export const FirebaseService = {
     return null;
   },
 
-  // Гость: слушает игру
-  subscribeToGame: (cb: (data: any) => void) => {
-    return onValue(ref(db, 'gameState'), (s) => {
-      const val = s.val();
-      if (val) cb(val);
-    });
+  subscribeToEvent: (cb: (data: any) => void) => {
+    return onValue(ref(db, 'currentEvent'), (s) => cb(s.val()));
   },
 
-  // Гость: отправляет клики/ответы
-  sendAction: (type: string, data: any) => {
-    push(ref(db, `actions/${type}`), { ...data, timestamp: Date.now() });
+  subscribeToGame: (cb: (data: any) => void) => {
+    return onValue(ref(db, 'gameState'), (s) => cb(s.val()));
+  },
+
+  // Подписка на все данные сессии (для Большого Экрана)
+  subscribeToSessionData: (code: string, cb: (data: any) => void) => {
+    return onValue(ref(db, `session_data/${code}`), (s) => cb(s.val() || {}));
+  },
+
+  // Пинг экрана (Heartbeat)
+  sendScreenHeartbeat: () => {
+    set(ref(db, 'screen_status'), { last_seen: Date.now() });
+  },
+
+  subscribeToScreenStatus: (cb: (lastSeen: number) => void) => {
+    return onValue(ref(db, 'screen_status/last_seen'), (s) => cb(s.val()));
   }
 };
