@@ -84,12 +84,6 @@ const TRANSLATIONS = {
   }
 };
 
-useEffect(() => {
-    if (activeEvent && activeEvent.status === 'LIVE') {
-       FirebaseService.syncEvent(activeEvent);
-    }
-  }, [activeEvent]);
-
 const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) => {
   const [tab, setTab] = useState<'EVENTS' | 'GAMES' | 'CRM' | 'INFO' | 'TIMING'>('EVENTS');
   const [events, setEvents] = useState<LiveEvent[]>(() => {
@@ -111,14 +105,14 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
     localStorage.setItem('mc_events', JSON.stringify(events));
   }, [events]);
 
-// --- НОВЫЙ БЛОК: Отправка в Интернет ---
+  // --- ВОТ ПРАВИЛЬНОЕ МЕСТО ДЛЯ КОДА СВЯЗИ ---
   useEffect(() => {
     // Если мы В ЭФИРЕ, отправляем данные в Firebase
     if (activeEvent && activeEvent.status === 'LIVE') {
       FirebaseService.syncEvent(activeEvent);
     }
-  }, [activeEvent]); // Сработает при любом изменении активного события
-  // ----------------------------------------
+  }, [activeEvent]); 
+  // ------------------------------------------
 
   // Sync monitoring
   useEffect(() => {
@@ -200,6 +194,9 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
     setActiveEvent(updated);
     setEvents(prev => prev.map(e => e.id === activeEvent.id ? updated : e));
     localStorage.setItem('active_event', JSON.stringify(updated));
+
+    // СИНХРОНИЗАЦИЯ ПРИ ПЕРЕКЛЮЧЕНИИ
+    FirebaseService.syncEvent(updated);
 
     if (isStopping) {
       const currentGs = JSON.parse(localStorage.getItem('game_state') || '{}');
