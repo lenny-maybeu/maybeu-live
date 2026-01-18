@@ -165,11 +165,16 @@ const BigScreenView: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => 
            setOnlineCount(Object.keys(data.registry).length);
          }
          
+         // --- ЛОГИКА ПОБЕДЫ В "ЖМИ" ---
          if (gameState?.gameType === GameType.PUSH_IT && data.race && !gameFinished && gameState?.isActive && !gameState?.isCountdown) {
             const winnerEntry = Object.entries(data.race).find(([_, count]) => Number(count) >= 50);
-            if (winnerEntry) {
-              setGameFinished(true);
-            }
+            if (winnerEntry) setGameFinished(true);
+         }
+
+         // --- ЛОГИКА ПОБЕДЫ В "ТРЯСИ" ---
+         if (gameState?.gameType === GameType.SHAKE_IT && data.shake && !gameFinished && gameState?.isActive) {
+            const winnerEntry = Object.entries(data.shake).find(([_, count]) => Number(count) >= 150);
+            if (winnerEntry) setGameFinished(true);
          }
       });
       return unsub;
@@ -242,7 +247,6 @@ const BigScreenView: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => 
       .slice(0, 5);
   }, [sessionData.race]);
 
-  // Результаты тряски (топ-5)
   const shakeResults = useMemo(() => {
     if (!sessionData.shake) return [];
     return Object.entries(sessionData.shake)
@@ -321,8 +325,8 @@ const BigScreenView: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => 
           
           {activeEvent.status === 'LIVE' ? (
             <div className="bg-white p-8 rounded-[40px] shadow-2xl inline-block border-[12px] border-indigo-600/20 animate-in zoom-in duration-500">
-              <img src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=maybeu-live.vercel.app`} alt="QR" className="w-[300px] h-[300px]" />
-              <div className="mt-4 text-indigo-900 font-black text-xl uppercase tracking-widest">{t.joinOn} maybeu.ru</div>
+              <img src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=https://maybeu.live/join/${activeEvent.code}`} alt="QR" className="w-[300px] h-[300px]" />
+              <div className="mt-4 text-indigo-900 font-black text-xl uppercase tracking-widest">{t.joinOn} maybeu.live</div>
             </div>
           ) : (
             <div className="py-20 animate-in fade-in duration-1000">
@@ -375,9 +379,11 @@ const BigScreenView: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => 
             <div className="text-center mb-8">
               <Trophy size={100} className="text-amber-500 mx-auto animate-bounce" />
               <h1 className="text-6xl font-black text-white italic mt-4 uppercase tracking-tighter">{t.winner}</h1>
-              {gameState.gameType === GameType.PUSH_IT && pushResults[0] && (
+              {(gameState.gameType === GameType.PUSH_IT || gameState.gameType === GameType.SHAKE_IT) && (
                  <div className="mt-4 animate-in fade-in slide-in-from-bottom-4">
-                    <span className="text-8xl font-black text-amber-500 uppercase italic tracking-tighter">{pushResults[0].name}</span>
+                    <span className="text-8xl font-black text-amber-500 uppercase italic tracking-tighter">
+                      {gameState.gameType === GameType.PUSH_IT ? pushResults[0]?.name : shakeResults[0]?.name}
+                    </span>
                  </div>
               )}
             </div>
@@ -460,7 +466,7 @@ const BigScreenView: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => 
                           <div className="w-full bg-slate-900 rounded-[30px] border-4 border-slate-800 relative overflow-hidden flex-1 shadow-2xl">
                              <div 
                                className={`absolute bottom-0 w-full transition-all duration-300 rounded-t-[20px] ${i === 0 ? 'bg-gradient-to-t from-rose-600 to-amber-500 animate-pulse' : 'bg-indigo-600'}`}
-                               style={{ height: `${Math.min(100, score)}%` }}
+                               style={{ height: `${Math.min(100, score / 1.5)}%` }}
                              />
                           </div>
                           <div className="text-3xl font-mono text-indigo-400 font-black">{score}</div>

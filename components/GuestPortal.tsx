@@ -12,7 +12,6 @@ interface Props {
 }
 
 const TRANSLATIONS = {
-  // ... (Оставляем словарь без изменений для краткости, он подтянется)
   ru: {
     join: 'Вход в игру',
     enterDetails: 'Введите код события и ваше имя',
@@ -131,13 +130,11 @@ const GuestPortal: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => {
 
   const t = TRANSLATIONS[lang];
 
-  // Подписка на игру
   useEffect(() => {
      if (isJoined) {
         return FirebaseService.subscribeToGame((val) => {
            if (val) {
              setGameState((prev: any) => {
-                // Сброс счетчиков при смене игры
                 if (prev?.gameType !== val.gameType) {
                   setPushCount(0);
                   setShakeCount(0);
@@ -163,8 +160,12 @@ const GuestPortal: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => {
       let lastX = 0, lastY = 0, lastZ = 0;
       let lastUpdate = 0;
       const SHAKE_THRESHOLD = 15;
+      const MAX_SHAKES = 150; // Цель победы
 
       const handleMotion = (e: DeviceMotionEvent) => {
+        // Если уже достигли максимума, не считаем дальше
+        if (shakeCount >= MAX_SHAKES) return;
+
         const current = e.accelerationIncludingGravity;
         if (!current) return;
         
@@ -177,14 +178,21 @@ const GuestPortal: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => {
           
           if (speed > SHAKE_THRESHOLD) {
              setShakeCount(prev => {
+               if (prev >= MAX_SHAKES) return prev; // Двойная защита
                const newCount = prev + 1;
-               // Отправляем в Firebase каждые 5 "трясков", чтобы не спамить
-               if (newCount % 5 === 0) {
+               
+               // Отправляем в Firebase
+               if (newCount % 5 === 0 || newCount === MAX_SHAKES) {
                  FirebaseService.updateShakeCount(joinedEvent.code, name, newCount);
                }
                return newCount;
              });
-             if (window.navigator.vibrate) window.navigator.vibrate(50);
+             
+             // Вибрация (обычная при тряске, длинная при победе)
+             if (window.navigator.vibrate) {
+                if (shakeCount + 1 >= MAX_SHAKES) window.navigator.vibrate([200, 100, 200]);
+                else window.navigator.vibrate(50);
+             }
           }
           lastX = current.x!;
           lastY = current.y!;
@@ -195,10 +203,9 @@ const GuestPortal: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => {
       window.addEventListener('devicemotion', handleMotion);
       return () => window.removeEventListener('devicemotion', handleMotion);
     }
-  }, [gameState?.gameType, permissionGranted, joinedEvent, name]);
+  }, [gameState?.gameType, permissionGranted, joinedEvent, name, shakeCount]);
 
   const requestShakePermission = () => {
-    // Для iOS 13+
     if (typeof (DeviceMotionEvent as any).requestPermission === 'function') {
       (DeviceMotionEvent as any).requestPermission()
         .then((response: string) => {
@@ -210,7 +217,6 @@ const GuestPortal: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => {
         })
         .catch(console.error);
     } else {
-      // Для Android и старых iOS
       setPermissionGranted(true);
     }
   };
@@ -558,7 +564,7 @@ const GuestPortal: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => {
         <div className="h-full flex flex-col items-center justify-center space-y-12">
           <div className="text-center space-y-4">
              <h2 className="text-5xl font-black text-white italic">{t.shakePhone}</h2>
-             <div className="text-6xl font-black text-rose-400 font-mono">{shakeCount}</div>
+             <div className="text-6xl font-black text-rose-400 font-mono">{shakeCount}/150</div>
           </div>
           
           {!permissionGranted ? (
@@ -570,7 +576,7 @@ const GuestPortal: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => {
               <span className="text-white font-black text-xs uppercase max-w-[100px] text-center">{t.enableSensor}</span>
             </button>
           ) : (
-            <div className="w-48 h-48 bg-rose-500 rounded-full flex items-center justify-center shadow-2xl animate-[spin_0.5s_linear_infinite] border-4 border-white/20">
+            <div className={`w-48 h-48 bg-rose-500 rounded-full flex items-center justify-center shadow-2xl animate-[spin_0.5s_linear_infinite] border-4 border-white/20 ${shakeCount >= 150 ? 'opacity-50 grayscale' : ''}`}>
               <PhoneIcon size={64} className="text-white" />
             </div>
           )}
