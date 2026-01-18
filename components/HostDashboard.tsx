@@ -1,4 +1,4 @@
-
+import { FirebaseService } from '../services/firebase';
 import React, { useState, useEffect } from 'react';
 import { LiveEvent, GameType, Language, TimingItem } from '../types';
 import { Plus, Users, Calendar, Gamepad2, Database, ChevronRight, PlayCircle, X, Trash2, Edit2, MapPin, Clock, Briefcase, Info, Save, ListTodo, GripVertical, MonitorOff, MonitorCheck, AlertTriangle, Check } from 'lucide-react';
@@ -104,6 +104,15 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
   useEffect(() => {
     localStorage.setItem('mc_events', JSON.stringify(events));
   }, [events]);
+
+// --- НОВЫЙ БЛОК: Отправка в Интернет ---
+  useEffect(() => {
+    // Если мы В ЭФИРЕ, отправляем данные в Firebase
+    if (activeEvent && activeEvent.status === 'LIVE') {
+      FirebaseService.syncEvent(activeEvent);
+    }
+  }, [activeEvent]); // Сработает при любом изменении активного события
+  // ----------------------------------------
 
   // Sync monitoring
   useEffect(() => {

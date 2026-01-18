@@ -1,4 +1,4 @@
-
+import { FirebaseService } from '../services/firebase';
 import React, { useState, useEffect, useRef } from 'react';
 import { LiveEvent, GameType, QuizQuestion, Language } from '../types';
 import { Zap, Play, RotateCcw, Award, Plus, Trash2, Cpu, PlayCircle, ImageIcon, Users, Settings2, MousePointer2, HelpCircle, Clock, PlusCircle, List, CheckCircle2, XCircle, Rocket, Layers, MonitorOff, Edit2, Save, X, Check } from 'lucide-react';
@@ -167,6 +167,19 @@ const QuizControl: React.FC<Props> = ({ activeEvent, lang }) => {
       artTheme,
       timestamp: Date.now()
     }));
+
+FirebaseService.syncGameState({
+      gameType: gameMode,
+      currentIdx,
+      questStage,
+      isActive: currentIdx >= 0 || countdown !== null,
+      isCountdown: countdown !== null,
+      countdownValue: countdown,
+      questions,
+      artTheme,
+      timestamp: Date.now()
+    });
+
   }, [gameMode, currentIdx, questStage, questions, artTheme, countdown]);
 
   const handleClearScreen = () => {

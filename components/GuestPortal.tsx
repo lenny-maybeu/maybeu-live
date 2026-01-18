@@ -1,4 +1,4 @@
-
+import { FirebaseService } from '../services/firebase';
 import React, { useState, useEffect, useRef } from 'react';
 import { LiveEvent, GameType, Language, GuestRecord } from '../types';
 import * as LucideIcons from 'lucide-react';
@@ -147,11 +147,19 @@ const GuestPortal: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => {
     return () => clearInterval(interval);
   }, []);
 
-  const handleJoin = () => {
+const handleJoin = async () => {
     setError('');
-    const events = JSON.parse(localStorage.getItem('mc_events') || '[]');
-    const targetEvent = events.find((e: any) => e.code.toUpperCase() === eventCode.toUpperCase());
     
+    // 1. Сначала пробуем найти событие в Интернете (Firebase)
+    let targetEvent = await FirebaseService.findEventByCode(eventCode);
+
+    // 2. Если в интернете не нашли, ищем локально (резервный вариант)
+    if (!targetEvent) {
+       const events = JSON.parse(localStorage.getItem('mc_events') || '[]');
+       targetEvent = events.find((e: any) => e.code.toUpperCase() === eventCode.toUpperCase());
+    }
+    
+    // Проверяем, нашли ли событие и активно ли оно
     if (!targetEvent || (targetEvent.status !== 'LIVE' && targetEvent.status !== 'COMPLETED')) {
       setError(t.noEvent);
       return;
@@ -163,6 +171,7 @@ const GuestPortal: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => {
     setLeadName(name); 
     setIsJoined(true);
     
+    // Сохраняем имя гостя локально для истории
     const registryKey = `guest_registry_${targetEvent.code}`;
     const registry = JSON.parse(localStorage.getItem(registryKey) || '[]');
     if (!registry.includes(name)) {
@@ -170,6 +179,21 @@ const GuestPortal: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => {
       localStorage.setItem(registryKey, JSON.stringify(registry));
     }
   };
+
+// --- ВСТАВИТЬ СЮДА (Это новый код для связи) ---
+  useEffect(() => {
+     if (isJoined) {
+        // Как только вошли — начинаем слушать Firebase
+        console.log("🔥 Подключаемся к эфиру...");
+        const unsubscribe = FirebaseService.subscribeToGame((gameData) => {
+           if (gameData) {
+             setGameState(gameData);
+           }
+        });
+        return unsubscribe;
+     }
+  }, [isJoined]);
+  // -----------------------------------------------
 
   const submitQuestAnswer = (value: any, isImage: boolean = false) => {
     if (answerSubmitted !== null || !joinedEvent || !gameState) return;
