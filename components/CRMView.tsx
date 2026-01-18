@@ -1,8 +1,7 @@
-
-import React, { useState, useEffect, useRef } from 'react';
+import { FirebaseService } from '../services/firebase';
+import React, { useState, useEffect } from 'react';
+import { Download, Search, Trash2, User, Phone, Calendar, MessageSquare, Database } from 'lucide-react';
 import { GuestRecord, Language } from '../types';
-import { Search, UserPlus, Sparkles, Database, Send, Trash2, Download, Upload, FileJson, X, Check } from 'lucide-react';
-import { generateGuestGreeting } from '../services/geminiService';
 
 interface Props {
   lang: Language;
@@ -10,342 +9,177 @@ interface Props {
 
 const TRANSLATIONS = {
   ru: {
-    clients: 'Клиенты',
-    search: 'Поиск...',
-    noContacts: 'Контакты отсутствуют',
-    selectClient: 'Выберите клиента из списка или добавьте нового.',
-    birthday: 'День рождения',
-    notes: 'Заметки ведущего',
-    contentCenter: 'ИИ Поздравление',
-    write: 'Генерация...',
-    genGreeting: 'СОЗДАТЬ ИИ ПОЗДРАВЛЕНИЕ',
-    sendWA: 'WhatsApp',
-    regen: 'ПЕРЕГЕНЕРИРОВАТЬ',
-    addClientTitle: 'Добавить контакт',
-    name: 'ФИО',
-    phone: 'Телефон',
-    email: 'Email',
-    save: 'Сохранить',
-    cancel: 'Отмена',
-    export: 'Экспорт базы',
-    import: 'Импорт',
-    importSuccess: 'База успешно обновлена!',
-    importError: 'Ошибка при чтении файла',
-    confirmDelete: 'Удалить?'
+    title: 'База клиентов',
+    subtitle: 'Сбор контактов после мероприятий',
+    search: 'Поиск по имени или телефону...',
+    download: 'Скачать CSV',
+    clear: 'Очистить базу',
+    noData: 'База пуста. Контакты появятся здесь после завершения эфира.',
+    cols: { name: 'Имя', contact: 'Контакты', bday: 'День рождения', notes: 'Отзыв / Заметки', date: 'Дата события' },
+    total: 'Всего записей'
   },
   en: {
-    clients: 'Clients',
-    search: 'Search...',
-    noContacts: 'No contacts found',
-    selectClient: 'Select a client or add a new one.',
-    birthday: 'Birthday',
-    notes: 'Host Notes',
-    contentCenter: 'AI Greeting',
-    write: 'Writing...',
-    genGreeting: 'CREATE AI GREETING',
-    sendWA: 'WhatsApp',
-    regen: 'REGENERATE',
-    addClientTitle: 'Add Contact',
-    name: 'Name',
-    phone: 'Phone',
-    email: 'Email',
-    save: 'Save',
-    cancel: 'Cancel',
-    export: 'Export Data',
-    import: 'Import',
-    importSuccess: 'Database updated!',
-    importError: 'Invalid file',
-    confirmDelete: 'Delete?'
+    title: 'CRM Database',
+    subtitle: 'Collected contacts from events',
+    search: 'Search by name or phone...',
+    download: 'Download CSV',
+    clear: 'Clear Database',
+    noData: 'Database is empty. Contacts will appear here after event ends.',
+    cols: { name: 'Name', contact: 'Contact', bday: 'Birthday', notes: 'Feedback', date: 'Date' },
+    total: 'Total records'
   }
 };
 
 const CRMView: React.FC<Props> = ({ lang }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [guests, setGuests] = useState<GuestRecord[]>(() => {
-    const saved = localStorage.getItem('mc_crm_guests');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [selectedGuest, setSelectedGuest] = useState<GuestRecord | null>(null);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [aiGreeting, setAiGreeting] = useState('');
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [newGuestData, setNewGuestData] = useState({ name: '', phone: '', email: '' });
-  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
+  const [leads, setLeads] = useState<GuestRecord[]>([]);
+  const [search, setSearch] = useState('');
   const t = TRANSLATIONS[lang];
 
+  // ПОДПИСКА НА FIREBASE ВМЕСТО LOCALSTORAGE
   useEffect(() => {
-    localStorage.setItem('mc_crm_guests', JSON.stringify(guests));
-  }, [guests]);
+    const unsubscribe = FirebaseService.subscribeToLeads((data) => {
+      // Firebase возвращает данные, мы их сразу кладем в стейт
+      setLeads(data as GuestRecord[]);
+    });
 
-  const handleAddClient = () => {
-    if (!newGuestData.name) return;
-    const newGuest: GuestRecord = {
-      id: Math.random().toString(36).substr(2, 9),
-      name: newGuestData.name,
-      phone: newGuestData.phone,
-      email: newGuestData.email,
-      notes: '',
-      birthday: ''
-    };
-    setGuests(prev => [...prev, newGuest]);
-    setIsModalOpen(false);
-    setNewGuestData({ name: '', phone: '', email: '' });
+    // Отписываемся при выходе с экрана
+    return () => unsubscribe();
+  }, []);
+
+  const filteredLeads = leads.filter(l => 
+    l.name.toLowerCase().includes(search.toLowerCase()) || 
+    l.phone?.includes(search) || 
+    l.email?.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleDownload = () => {
+    if (leads.length === 0) return;
+    
+    // BOM для корректного отображения кириллицы в Excel
+    const BOM = "\uFEFF"; 
+    const headers = [t.cols.name, t.cols.contact, t.cols.bday, t.cols.notes, t.cols.date].join(';');
+    const rows = leads.map(l => 
+      `"${l.name}";"${l.phone || l.email}";"${l.birthday || ''}";"${l.notes || ''}";"${l.lastEventDate || ''}"`
+    ).join('\n');
+
+    const csvContent = BOM + headers + '\n' + rows;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `maybeu_leads_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
-  const updateGuestField = (id: string, field: keyof GuestRecord, value: string) => {
-    setGuests(prev => prev.map(g => g.id === id ? { ...g, [field]: value } : g));
-    if (selectedGuest?.id === id) {
-      setSelectedGuest(prev => prev ? { ...prev, [field]: value } : null);
+  const handleClear = () => {
+    if (confirm(lang === 'ru' ? 'Вы уверены? Это удалит ВСЕ контакты из облака.' : 'Are you sure? This will delete ALL contacts from cloud.')) {
+      FirebaseService.clearLeads();
     }
   };
 
-  const deleteGuest = (id: string) => {
-    const updated = guests.filter(g => g.id !== id);
-    setGuests(updated);
-    if (selectedGuest?.id === id) setSelectedGuest(null);
-    setConfirmDeleteId(null);
-  };
-
-  const handleGenerateGreeting = async (guest: GuestRecord) => {
-    setIsGenerating(true);
-    const greeting = await generateGuestGreeting(guest.name, "Birthday", "Collaboration", lang);
-    setAiGreeting(greeting);
-    setIsGenerating(false);
-  };
-
-  const handleExport = () => {
-    const dataStr = JSON.stringify(guests, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-    const exportFileDefaultName = `maybeu_crm_backup_${new Date().toISOString().split('T')[0]}.json`;
-
-    const linkElement = document.createElement('a');
-    linkElement.setAttribute('href', dataUri);
-    linkElement.setAttribute('download', exportFileDefaultName);
-    linkElement.click();
-  };
-
-  const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const json = JSON.parse(e.target?.result as string);
-        if (Array.isArray(json)) {
-          setGuests(json);
-          alert(t.importSuccess);
-        } else {
-          alert(t.importError);
-        }
-      } catch (err) {
-        alert(t.importError);
-      }
-    };
-    reader.readAsText(file);
-  };
-
   return (
-    <div className="flex flex-col md:flex-row h-[700px] bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl animate-in slide-in-from-right-4 duration-500">
-      <div className="w-full md:w-1/3 border-r border-slate-800 flex flex-col">
-        <div className="p-4 border-b border-slate-800 space-y-4 bg-slate-950/50">
-          <div className="flex justify-between items-center mb-1">
-             <h3 className="font-black text-lg text-white italic uppercase tracking-tighter">{t.clients}</h3>
-             <div className="flex gap-2">
-                <button 
-                  onClick={handleExport}
-                  title={t.export}
-                  className="p-2 text-slate-400 hover:text-white bg-slate-800 rounded-lg transition-all"
-                >
-                  <Download size={16} />
-                </button>
-                <button 
-                  onClick={() => fileInputRef.current?.click()}
-                  title={t.import}
-                  className="p-2 text-slate-400 hover:text-white bg-slate-800 rounded-lg transition-all"
-                >
-                  <Upload size={16} />
-                </button>
-                <input 
-                  type="file" 
-                  ref={fileInputRef} 
-                  onChange={handleImport} 
-                  accept=".json" 
-                  className="hidden" 
-                />
-             </div>
+    <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
+       <div className="flex flex-col md:flex-row justify-between items-end gap-6 border-b border-slate-800 pb-8">
+          <div>
+            <h2 className="text-3xl font-black text-white italic flex items-center gap-3">
+               <Database className="text-indigo-500" /> {t.title}
+            </h2>
+            <p className="text-slate-400 font-bold mt-2">{t.subtitle}</p>
           </div>
-          
-          <button 
-            type="button"
-            onClick={() => setIsModalOpen(true)} 
-            className="w-full bg-indigo-600 text-white py-3 rounded-xl hover:bg-indigo-500 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-600/20 active:scale-95 text-xs font-black uppercase tracking-widest"
-          >
-            <UserPlus size={18} /> {t.addClientTitle}
-          </button>
-
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={16} />
-            <input 
-              type="text" 
-              placeholder={t.search} 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-2 text-sm focus:border-indigo-500 outline-none transition-all text-white"
-            />
+          <div className="flex gap-3">
+             <button 
+               onClick={handleClear}
+               disabled={leads.length === 0}
+               className="px-6 py-3 bg-slate-900 text-rose-500 border border-slate-800 hover:bg-rose-950/30 rounded-xl font-black text-xs uppercase flex items-center gap-2 transition-all disabled:opacity-50"
+             >
+                <Trash2 size={16} /> <span className="hidden md:inline">{t.clear}</span>
+             </button>
+             <button 
+               onClick={handleDownload}
+               disabled={leads.length === 0}
+               className="px-6 py-3 bg-emerald-600 text-white rounded-xl font-black text-xs uppercase flex items-center gap-2 shadow-xl hover:bg-emerald-500 transition-all disabled:opacity-50"
+             >
+                <Download size={16} /> {t.download}
+             </button>
           </div>
-        </div>
-        
-        <div className="flex-1 overflow-y-auto divide-y divide-slate-800/50">
-          {guests.length === 0 ? (
-            <div className="p-10 text-center text-slate-600 font-bold uppercase text-[10px] tracking-widest">{t.noContacts}</div>
-          ) : guests.filter(g => g.name.toLowerCase().includes(searchTerm.toLowerCase())).map(guest => (
-            <div 
-              key={guest.id} 
-              onClick={() => { setSelectedGuest(guest); setAiGreeting(''); }}
-              className={`p-4 hover:bg-slate-800/50 cursor-pointer transition-all flex justify-between items-center group ${selectedGuest?.id === guest.id ? 'bg-indigo-600/10 border-r-4 border-indigo-500' : ''}`}
-            >
-              <div className="flex-1 truncate">
-                <p className="font-bold text-slate-100">{guest.name}</p>
-                <p className="text-[10px] text-slate-500 font-bold truncate uppercase">{guest.phone || guest.email || 'Нет контактов'}</p>
-              </div>
-              
-              <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
-                {confirmDeleteId === guest.id ? (
-                  <div className="flex items-center gap-1 animate-in slide-in-from-right-2">
-                    <button 
-                      onClick={() => deleteGuest(guest.id)} 
-                      className="p-1.5 bg-rose-600 text-white rounded-lg hover:bg-rose-500 transition-colors"
-                    >
-                      <Check size={14} />
-                    </button>
-                    <button 
-                      onClick={() => setConfirmDeleteId(null)} 
-                      className="p-1.5 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 transition-colors"
-                    >
-                      <X size={14} />
-                    </button>
-                  </div>
-                ) : (
-                  <button 
-                    type="button"
-                    onClick={() => setConfirmDeleteId(guest.id)} 
-                    className="p-2 text-slate-600 group-hover:text-rose-500 hover:bg-rose-500/10 rounded-lg transition-all"
-                  >
-                    <Trash2 size={16}/>
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
+       </div>
 
-      <div className="flex-1 bg-slate-950/30 overflow-y-auto p-4 md:p-8">
-        {!selectedGuest ? (
-          <div className="h-full flex flex-col items-center justify-center text-slate-600 text-center opacity-30">
-            <Database size={64} className="mb-4" />
-            <p className="font-bold uppercase tracking-widest">{t.selectClient}</p>
-            <div className="mt-4 flex items-center gap-2 text-xs font-mono">
-               <FileJson size={14} /> 
-               <span>Backup system active</span>
+       <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
+          <input 
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder={t.search}
+            className="w-full bg-slate-900 border border-slate-800 rounded-2xl pl-12 pr-6 py-4 text-white font-bold outline-none focus:border-indigo-500 transition-all placeholder:text-slate-600"
+          />
+       </div>
+
+       <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
+          {filteredLeads.length > 0 ? (
+            <div className="overflow-x-auto">
+               <table className="w-full text-left">
+                  <thead className="bg-slate-950 text-slate-500 font-black text-[10px] uppercase tracking-widest">
+                     <tr>
+                        <th className="p-6">{t.cols.name}</th>
+                        <th className="p-6">{t.cols.contact}</th>
+                        <th className="p-6">{t.cols.bday}</th>
+                        <th className="p-6">{t.cols.notes}</th>
+                        <th className="p-6">{t.cols.date}</th>
+                     </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800">
+                     {filteredLeads.map((lead, i) => (
+                        <tr key={i} className="hover:bg-white/5 transition-colors group">
+                           <td className="p-6 font-bold text-white flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-indigo-500/20 text-indigo-400 flex items-center justify-center">
+                                 <User size={14} />
+                              </div>
+                              {lead.name}
+                           </td>
+                           <td className="p-6 font-medium text-slate-300">
+                              <div className="flex items-center gap-2">
+                                 <Phone size={14} className="text-slate-600" />
+                                 {lead.phone || lead.email || '-'}
+                              </div>
+                           </td>
+                           <td className="p-6 font-medium text-slate-300">
+                              {lead.birthday && (
+                                 <div className="flex items-center gap-2">
+                                    <Calendar size={14} className="text-slate-600" />
+                                    {lead.birthday}
+                                 </div>
+                              )}
+                           </td>
+                           <td className="p-6 font-medium text-slate-400 italic max-w-xs truncate group-hover:whitespace-normal group-hover:overflow-visible group-hover:break-words">
+                              {lead.notes && (
+                                 <div className="flex items-center gap-2">
+                                    <MessageSquare size={14} className="text-slate-600 shrink-0" />
+                                    {lead.notes.replace('Отзыв: ', '')}
+                                 </div>
+                              )}
+                           </td>
+                           <td className="p-6 font-bold text-slate-500 text-xs">
+                              {lead.lastEventDate}
+                           </td>
+                        </tr>
+                     ))}
+                  </tbody>
+               </table>
             </div>
+          ) : (
+            <div className="p-20 text-center space-y-4">
+               <div className="w-20 h-20 bg-slate-800 rounded-full flex items-center justify-center mx-auto mb-6">
+                  <Database size={32} className="text-slate-600" />
+               </div>
+               <p className="text-slate-500 font-bold uppercase tracking-widest">{t.noData}</p>
+            </div>
+          )}
+          <div className="bg-slate-950 p-4 text-center text-[10px] font-black text-slate-600 uppercase tracking-widest">
+             {t.total}: {leads.length}
           </div>
-        ) : (
-          <div className="space-y-6 animate-in fade-in duration-300">
-            <header className="space-y-2">
-              <h2 className="text-3xl md:text-4xl font-black text-white italic tracking-tighter">{selectedGuest.name}</h2>
-              <div className="flex flex-wrap gap-3">
-                <div className="bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl">
-                  <span className="text-[9px] font-black text-slate-500 uppercase block">{t.phone}</span>
-                  <span className="text-indigo-400 font-bold text-sm">{selectedGuest.phone || '—'}</span>
-                </div>
-                <div className="bg-slate-900 border border-slate-800 px-4 py-2 rounded-xl">
-                  <span className="text-[9px] font-black text-slate-500 uppercase block">{t.birthday}</span>
-                  <input 
-                    type="date" 
-                    value={selectedGuest.birthday || ''} 
-                    onChange={e => updateGuestField(selectedGuest.id, 'birthday', e.target.value)}
-                    className="bg-transparent text-white font-bold outline-none border-none text-sm"
-                  />
-                </div>
-              </div>
-            </header>
-
-            <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
-               <h4 className="text-[10px] font-black text-indigo-500 uppercase flex items-center gap-2"> {t.notes}</h4>
-               <textarea 
-                  value={selectedGuest.notes || ''} 
-                  onChange={e => updateGuestField(selectedGuest.id, 'notes', e.target.value)}
-                  placeholder="Добавьте важную информацию о клиенте..."
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-slate-200 font-medium outline-none focus:border-indigo-500 h-28 resize-none text-sm"
-               />
-            </div>
-
-            <div className="space-y-4">
-              <button 
-                type="button"
-                onClick={() => handleGenerateGreeting(selectedGuest)}
-                disabled={isGenerating}
-                className="w-full bg-indigo-600 hover:bg-indigo-500 py-4 rounded-xl text-xs font-black text-white flex items-center justify-center gap-2 transition-all shadow-xl active:scale-95 disabled:opacity-50 tracking-widest"
-              >
-                <Sparkles size={16} /> {isGenerating ? t.write : t.genGreeting}
-              </button>
-
-              {aiGreeting && (
-                <div className="bg-indigo-950/20 border-2 border-indigo-500/20 p-6 rounded-3xl relative animate-in slide-in-from-bottom-2">
-                  <p className="text-base leading-relaxed text-indigo-100 font-medium italic">"{aiGreeting}"</p>
-                  <div className="mt-6 flex flex-col sm:flex-row gap-3">
-                    <a 
-                      href={`https://wa.me/${selectedGuest.phone?.replace(/\D/g, '')}?text=${encodeURIComponent(aiGreeting)}`}
-                      target="_blank"
-                      className="flex-1 px-6 py-3 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-[10px] font-black flex items-center justify-center gap-2 transition-all text-white uppercase"
-                    >
-                      <Send size={14} /> {t.sendWA}
-                    </a>
-                    <button 
-                      type="button"
-                      onClick={() => handleGenerateGreeting(selectedGuest)}
-                      className="flex-1 px-6 py-3 border border-indigo-500/30 hover:bg-indigo-500/10 rounded-xl text-[10px] font-black text-indigo-300 transition-all uppercase"
-                    >
-                      {t.regen}
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Add Client Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
-           <div className="bg-slate-900 border border-slate-800 w-full max-w-md rounded-[40px] p-8 shadow-2xl animate-in zoom-in-95">
-              <h2 className="text-2xl font-black text-white italic mb-6 uppercase tracking-tighter">{t.addClientTitle}</h2>
-              <div className="space-y-4">
-                 <div>
-                    <label className="text-[10px] font-black text-slate-500 uppercase block mb-1">{t.name}</label>
-                    <input type="text" value={newGuestData.name} onChange={e => setNewGuestData({...newGuestData, name: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-5 py-4 text-white font-bold outline-none focus:border-indigo-500" placeholder="Иван Иванов" />
-                 </div>
-                 <div>
-                    <label className="text-[10px] font-black text-slate-500 uppercase block mb-1">{t.phone}</label>
-                    <input type="text" value={newGuestData.phone} onChange={e => setNewGuestData({...newGuestData, phone: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-5 py-4 text-white font-bold outline-none focus:border-indigo-500" placeholder="+7 999 000 00 00" />
-                 </div>
-                 <div>
-                    <label className="text-[10px] font-black text-slate-500 uppercase block mb-1">{t.email}</label>
-                    <input type="email" value={newGuestData.email} onChange={e => setNewGuestData({...newGuestData, email: e.target.value})} className="w-full bg-slate-950 border border-slate-800 rounded-2xl px-5 py-4 text-white font-bold outline-none focus:border-indigo-500" placeholder="ivan@mail.ru" />
-                 </div>
-                 <div className="flex gap-4 pt-6">
-                    <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 bg-slate-800 py-4 rounded-2xl font-black text-white uppercase text-xs">{t.cancel}</button>
-                    <button type="button" onClick={handleAddClient} disabled={!newGuestData.name} className="flex-1 bg-indigo-600 hover:bg-indigo-500 py-4 rounded-2xl font-black text-white uppercase text-xs shadow-xl shadow-indigo-600/20">{t.save}</button>
-                 </div>
-              </div>
-           </div>
-        </div>
-      )}
+       </div>
     </div>
   );
 };
