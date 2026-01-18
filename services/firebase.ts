@@ -1,5 +1,5 @@
 import { initializeApp } from "firebase/app";
-import { getDatabase, ref, onValue, set, push, update } from "firebase/database";
+import { getDatabase, ref, set, onValue, update, push, get } from "firebase/database";
 
 const firebaseConfig = {
   apiKey: "AIzaSyC-vmOaMUz_fBFjltcxp6RyNvyMmAmdqJ0",
@@ -15,110 +15,67 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
 
-const getCallback = (args: any[]) => args.find(arg => typeof arg === 'function');
+export const FirebaseService = {
+  // --- СОБЫТИЯ (Для HostDashboard) ---
+  // Когда ведущий меняет что-то, мы сохраняем это в облако
+  syncEvent: (event: any) => {
+    if (!event) return;
+    // Сохраняем как "активное событие" для всех
+    set(ref(db, 'currentEvent'), event);
+  },
 
-export class FirebaseService {
+  // --- ИГРА (Для QuizControl) ---
+  syncGameState: (state: any) => {
+    set(ref(db, 'gameState'), { ...state, timestamp: Date.now() });
+  },
+
+  // --- ГОСТИ (Для GuestPortal) ---
+  // Гость ищет событие по коду
+  findEventByCode: async (code: string) => {
+    const snapshot = await get(ref(db, 'currentEvent'));
+    const event = snapshot.val();
+    if (event && event.code === code) return event;
+    return null;
+  },
+
+  joinEvent: (guestName: string) => {
+    const id = guestName.replace(/[^a-zA-Z0-9]/g, '');
+    set(ref(db, `guests/${id}`), { name: guestName, online: true, timestamp: Date.now() });
+  },
+
+  // --- ЭКРАН (Для BigScreen) ---
+  subscribeToEverything: (
+    onEvent: (e: any) => void, 
+    onGame: (g: any) => void, 
+    onGuests: (c: number) => void
+  ) => {
+    onValue(ref(db, 'currentEvent'), (s) => onEvent(s.val()));
+    onValue(ref(db, 'gameState'), (s) => onGame(s.val()));
+    onValue(ref(db, 'guests'), (s) => onGuests(s.size));
+  },
+
+  // --- ИНТЕРАКТИВЫ ---
+  sendPush: (guestName: string, count: number) => {
+    update(ref(db, 'race'), { [guestName]: count });
+  },
+
+  subscribeToRace: (cb: (data: any) => void) => {
+    onValue(ref(db, 'race'), (s) => cb(s.val()));
+  },
   
-  // --- STATE ---
-  static subscribeToGameState(...args: any[]) {
-    console.log("🔥 Firebase: Проверка состояния игры...");
-    const cb = getCallback(args);
-    if (cb) return onValue(ref(db, 'gameState'), (s) => {
-        console.log("🔥 Firebase: Данные игры получены", s.val());
-        cb(s.val());
-    });
-    return () => {};
-  }
-
-  static onGameStateChange(...args: any[]) {
-    return this.subscribeToGameState(...args);
-  }
-
-  static updateGameState(data: any, ...args: any[]) {
-    console.log("🔥 Firebase: Обновление игры ->", data);
-    set(ref(db, 'gameState'), { activeEvent: data, timestamp: Date.now() });
-  }
-
-  static async resetGame(...args: any[]) {
-    console.log("🔥 Firebase: Сброс игры");
-    await set(ref(db, 'gameState'), null);
-  }
+  sendAnswer: (guestName: string, answerIdx: number) => {
+      push(ref(db, 'answers'), { guestName, answerIdx });
+  },
   
-  static async resetEvent(...args: any[]) {
-    await this.resetGame();
-  }
+  subscribeToAnswers: (cb: (data: any) => void) => {
+      onValue(ref(db, 'answers'), (s) => cb(s.val()));
+  },
 
-  // --- GUESTS ---
-  static registerGuest(...args: any[]) {
-    let id, name;
-    if (typeof args[0] === 'object') {
-      id = args[0].id || args[0].guestId;
-      name = args[0].name;
-    } else {
-      id = args[0];
-      name = args[1];
-    }
-    console.log(`🔥 Firebase: Гость ${name} пытается войти...`);
-    if (id) set(ref(db, `guests/${id}`), { name, joinedAt: Date.now(), score: 0 });
-  }
+  sendImage: (url: string, user: string) => {
+      push(ref(db, 'images'), { url, user });
+  },
 
-  static onGuestsCountChange(...args: any[]) {
-    console.log("🔥 Firebase: Подписка на количество гостей");
-    const cb = getCallback(args);
-    if (cb) return onValue(ref(db, 'guests'), (s) => cb(s.size));
-    return () => {};
+  subscribeToImages: (cb: (data: any) => void) => {
+      onValue(ref(db, 'images'), (s) => cb(s.val()));
   }
-
-  // --- SCREEN PULSE ---
-  static sendScreenPulse(...args: any[]) {
-    // console.log("🔥 Тук-тук (Пульс отправлен)"); // Можно раскомментировать, если нужно
-    set(ref(db, 'screenPulse'), Date.now());
-  }
-
-  static onScreenPulseChange(...args: any[]) {
-    console.log("🔥 Firebase: Слушаем пульс экрана...");
-    const cb = getCallback(args);
-    if (cb) return onValue(ref(db, 'screenPulse'), (s) => cb(s.val()));
-    return () => {};
-  }
-
-  // --- ANSWERS & OTHER ---
-  static submitAnswer(...args: any[]) {
-    console.log("🔥 Firebase: Ответ отправлен");
-    const arg1 = args[0];
-    const key = push(ref(db, 'answers')).key;
-    const payload = typeof arg1 === 'object' ? arg1 : { guestId: arg1, answerIdx: args[1] };
-    update(ref(db), { [`answers/${key}`]: payload });
-  }
-
-  static onAnswersChange(...args: any[]) {
-    const cb = getCallback(args);
-    if (cb) return onValue(ref(db, 'answers'), (s) => cb(s.val()));
-    return () => {};
-  }
-  
-  static addGuestImage(...args: any[]) {
-    console.log("🔥 Firebase: Загрузка картинки");
-    const payload = typeof args[0] === 'object' ? args[0] : { guestId: args[0], imageUrl: args[1] };
-    push(ref(db, 'guestImages'), payload);
-  }
-  
-  static onImagesChange(...args: any[]) {
-    const cb = getCallback(args);
-    if (cb) return onValue(ref(db, 'guestImages'), (s) => cb(s.val()));
-    return () => {};
-  }
-
-  static updatePushProgress(val: any) {
-    set(ref(db, 'pushProgress'), val);
-  }
-
-  static onPushProgressChange(...args: any[]) {
-    const cb = getCallback(args);
-    if (cb) return onValue(ref(db, 'pushProgress'), (s) => cb(s.val()));
-    return () => {};
-  }
-}
-
-export const updateGameState = FirebaseService.updateGameState;
-export const subscribeToGameState = FirebaseService.subscribeToGameState;
+};
