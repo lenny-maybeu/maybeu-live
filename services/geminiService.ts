@@ -1,144 +1,137 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import { QuizQuestion, Language } from "../types";
+import { GoogleGenAI } from "@google/genai";
+
+// 1. НАСТРОЙКА КЛЮЧА
+// Вставьте ваш ключ сюда вместо "ВАШ_КЛЮЧ_ЗДЕСЬ"
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "ВАШ_КЛЮЧ_ЗДЕСЬ"; 
+
+const client = new GoogleGenAI({ apiKey });
+
+// Проверка ключа перед запросом
+const checkApiKey = () => {
+  if (!apiKey || apiKey === "ВАШ_КЛЮЧ_ЗДЕСЬ" || apiKey === "") {
+    alert("ОШИБКА: Вы забыли вставить API ключ в файл services/geminiService.ts (строка 5)!");
+    return false;
+  }
+  return true;
+};
+
+// Функция для очистки JSON от лишнего текста (markdown, пробелы)
+const cleanAndParseJSON = (text: string) => {
+  try {
+    // 1. Пробуем распарсить сразу
+    return JSON.parse(text);
+  } catch (e) {
+    // 2. Если не вышло, ищем массив [...] внутри текста
+    try {
+      const firstBracket = text.indexOf('[');
+      const lastBracket = text.lastIndexOf(']');
+      
+      if (firstBracket !== -1 && lastBracket !== -1) {
+        const cleanJson = text.substring(firstBracket, lastBracket + 1);
+        return JSON.parse(cleanJson);
+      }
+      throw new Error("В ответе не найден JSON массив");
+    } catch (parseError) {
+      console.error("JSON Parse Error. Raw text:", text);
+      throw new Error("Нейросеть вернула некорректные данные. Попробуйте еще раз.");
+    }
+  }
+};
 
 /**
- * AI Service for generating interactive content using Google Gemini API.
+ * Генерация вопросов для квиза
+ * Используем самую быструю текстовую модель: gemini-1.5-flash
  */
+export const generateQuizQuestions = async (topic: string, lang: string, count: number = 5, mood: string = 'fun'): Promise<any[]> => {
+  if (!checkApiKey()) return [];
 
-// --- 1. ПРАВИЛЬНОЕ ПОЛУЧЕНИЕ КЛЮЧА ---
-// Проверяем все возможные варианты, чтобы ключ точно нашелся
-// @ts-ignore
-const apiKey = (typeof process !== "undefined" ? process.env.API_KEY : undefined) || import.meta.env.VITE_GEMINI_API_KEY || "";
-
-if (!apiKey) {
-  console.error("CRITICAL ERROR: API Key is missing. Check .env file.");
-}
-
-// --- 2. КВИЗ (ВАШ КОД + FIX КЛЮЧА) ---
-export const generateQuizQuestions = async (
-  topic: string, 
-  lang: Language, 
-  count: number = 5,
-  mood: string = "fun"
-): Promise<QuizQuestion[]> => {
   try {
-    // Используем найденный apiKey
-    const ai = new GoogleGenAI({ apiKey });
-    
-    const langText = lang === 'ru' ? 'русский' : 'английский';
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash', // Исправлено на 2.0-flash (3-preview может не работать у всех)
-      contents: {
-        role: 'user',
-        parts: [{ text: `Generate a list of ${count} ${mood} quiz questions on the topic "${topic}" for a live event. For each question, provide 4 options. Language: ${langText}.` }]
-      },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              id: { type: Type.STRING },
-              question: { type: Type.STRING },
-              options: { type: Type.ARRAY, items: { type: Type.STRING } },
-              correctAnswerIndex: { type: Type.INTEGER }
-            },
-            required: ["id", "question", "options", "correctAnswerIndex"]
-          }
-        }
-      }
+    const prompt = `
+      Create ${count} quiz questions about "${topic}". 
+      Language: ${lang}. 
+      Mood: ${mood}.
+      Format: JSON array of objects with keys: 
+      - question (string)
+      - options (array of 4 strings)
+      - correctAnswerIndex (number 0-3)
+      
+      Example:
+      [{"question":"Q1","options":["A","B","C","D"],"correctAnswerIndex":0}]
+      
+      Strictly return ONLY valid JSON.
+    `;
+
+    const response = await client.models.generateContent({
+      model: 'gemini-1.5-flash', 
+      contents: { role: 'user', parts: [{ text: prompt }] },
+      config: { responseMimeType: 'application/json' }
     });
 
-    if (response.text) {
-      // @ts-ignore
-      return JSON.parse(response.text());
-    }
-    return [];
-  } catch (e) {
-    console.error("Gemini quiz generation failed", e);
+    const text = response.text();
+    if (!text) throw new Error("Пустой ответ от нейросети");
+    
+    return cleanAndParseJSON(text);
+
+  } catch (error: any) {
+    console.error("Quiz Generation Error:", error);
+    // Выводим РЕАЛЬНУЮ причину ошибки
+    alert(`Ошибка квиза: ${error.message || error.toString()}`);
     return [];
   }
 };
 
-export const generateBelieveNotQuestions = async (
-  topic: string, 
-  lang: Language, 
-  count: number = 5
-): Promise<QuizQuestion[]> => {
+/**
+ * Генерация вопросов "Верю / Не верю"
+ */
+export const generateBelieveNotQuestions = async (topic: string, lang: string, count: number = 5): Promise<any[]> => {
+  if (!checkApiKey()) return [];
+
   try {
-    const ai = new GoogleGenAI({ apiKey });
-    
-    const langText = lang === 'ru' ? 'русский' : 'английский';
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: {
-        role: 'user',
-        parts: [{ text: `Generate a list of ${count} "True or False" facts about "${topic}". Language: ${langText}.` }]
-      },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              id: { type: Type.STRING },
-              question: { type: Type.STRING },
-              options: { type: Type.ARRAY, items: { type: Type.STRING } },
-              correctAnswerIndex: { type: Type.INTEGER }
-            },
-            required: ["id", "question", "options", "correctAnswerIndex"]
-          }
-        }
-      }
+    const prompt = `
+      Create ${count} "True or False" facts about "${topic}".
+      Language: ${lang}.
+      Format: JSON array of objects:
+      - question (string - the fact statement)
+      - options (array ["True", "False"] localized)
+      - correctAnswerIndex (0 for True, 1 for False)
+      
+      Strictly return ONLY valid JSON.
+    `;
+
+    const response = await client.models.generateContent({
+      model: 'gemini-1.5-flash',
+      contents: { role: 'user', parts: [{ text: prompt }] },
+      config: { responseMimeType: 'application/json' }
     });
 
-    if (response.text) {
-      // @ts-ignore
-      return JSON.parse(response.text());
-    }
-    return [];
-  } catch (e) {
-    console.error("Gemini believe/not generation failed", e);
+    const text = response.text();
+    if (!text) throw new Error("Пустой ответ от нейросети");
+
+    return cleanAndParseJSON(text);
+
+  } catch (error: any) {
+    console.error("Believe/Not Error:", error);
+    alert(`Ошибка игры "Верю/Не верю": ${error.message || error.toString()}`);
     return [];
   }
 };
 
-export const generateGuestGreeting = async (guestName: string, lang: Language): Promise<string> => {
-  try {
-    const ai = new GoogleGenAI({ apiKey });
-    
-    const langText = lang === 'ru' ? 'Russian' : 'English';
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash',
-      contents: {
-        role: 'user',
-        parts: [{ text: `Generate a short, funny, welcoming message for a guest named ${guestName} at a party. Max 10 words. Emoji included. Format for WhatsApp/Telegram. Language: ${langText}.` }]
-      }
-    });
-    // @ts-ignore
-    return response.text()?.trim() || `Привет, ${guestName}!`;
-  } catch (e) {
-    return `Привет, ${guestName}!`;
-  }
-};
+/**
+ * Генерация изображений (ИИ Арт)
+ * Используем быструю модель: imagen-3.0-fast-generate-001
+ */
+export const generateAiImage = async (prompt: string): Promise<string | null> => {
+  if (!checkApiKey()) return null;
 
-// --- 3. ИИ АРТ (БЫСТРАЯ МОДЕЛЬ) ---
-export const generateAiImage = async (prompt: string, size: "1K" | "2K" | "4K" = "1K"): Promise<string | null> => {
   try {
-    if (!apiKey) return null;
-    const ai = new GoogleGenAI({ apiKey });
-
-    // Используем FAST модель для скорости
-    const response = await ai.models.generateImages({
+    const response = await client.models.generateImages({
       model: 'imagen-3.0-fast-generate-001', 
       prompt: prompt,
       config: {
         numberOfImages: 1,
-        aspectRatio: "1:1",
-        safetyFilterLevel: "block_only_high", 
-        personGeneration: "allow_adult"
+        aspectRatio: '1:1',
+        safetyFilterLevel: 'block_only_high', 
+        personGeneration: 'allow_adult' 
       }
     });
 
@@ -148,11 +141,22 @@ export const generateAiImage = async (prompt: string, size: "1K" | "2K" | "4K" =
     }
     
     return null;
-  } catch (e: any) {
-    console.error("Gemini image generation failed", e);
-    // Полезные алерты для отладки
-    if (e.status === 403) alert("Ошибка 403: Нет доступа. Нужен биллинг в Google Cloud.");
-    if (e.status === 429) alert("Слишком много запросов. Подождите.");
+  } catch (error: any) {
+    console.error("Image Gen Error:", error);
+    
+    // Обработка частых ошибок
+    if (error.status === 403) {
+        alert("Ошибка 403: Запрещено. Для генерации картинок API ключ должен быть привязан к платежному аккаунту Google Cloud (Billing).");
+    } else if (error.status === 429) {
+        alert("Слишком много запросов. Подождите минуту.");
+    } else {
+        alert(`Ошибка генерации Арт: ${error.message || error.toString()}`);
+    }
     return null;
   }
+};
+
+// Заглушка для совместимости
+export const generateGuestGreeting = async (name: string): Promise<string> => {
+    return `Welcome, ${name}!`;
 };
