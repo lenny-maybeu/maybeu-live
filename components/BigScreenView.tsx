@@ -9,6 +9,7 @@ interface Props {
 }
 
 const TRANSLATIONS = {
+  // ... (Оставляем переводы без изменений)
   ru: {
     welcome: 'ДОБРО ПОЖАЛОВАТЬ',
     joinOn: 'Заходи на',
@@ -125,7 +126,6 @@ const BigScreenView: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => 
   const containerRef = useRef<HTMLDivElement>(null);
   const t = TRANSLATIONS[lang];
 
-  // 1. Подписываемся на текущее событие
   useEffect(() => {
     const unsub = FirebaseService.subscribeToEvent((evt) => {
       setActiveEvent(evt);
@@ -136,13 +136,11 @@ const BigScreenView: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => 
     return () => { unsub(); clearInterval(pulse); };
   }, []);
 
-  // 2. Подписываемся на данные игры
   useEffect(() => {
     const unsubGame = FirebaseService.subscribeToGame((gs) => {
       setGameState((prev: any) => {
          const isNewStep = prev?.currentIdx !== gs?.currentIdx || prev?.questStage !== gs?.questStage || prev?.gameType !== gs?.gameType;
          if (isNewStep && gs) {
-            // Сброс финиша при смене режима
             if (prev?.gameType !== gs.gameType) {
               setGameFinished(false);
             }
@@ -156,7 +154,6 @@ const BigScreenView: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => 
     return unsubGame;
   }, []);
 
-  // 3. Подписываемся на данные сессии (ГЛАВНОЕ: СЛУШАЕМ КЛИКИ И ТРЯСКУ)
   useEffect(() => {
     if (activeEvent?.code) {
       const unsub = FirebaseService.subscribeToSessionData(activeEvent.code, (data) => {
@@ -165,13 +162,11 @@ const BigScreenView: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => 
            setOnlineCount(Object.keys(data.registry).length);
          }
          
-         // --- ЛОГИКА ПОБЕДЫ В "ЖМИ" ---
          if (gameState?.gameType === GameType.PUSH_IT && data.race && !gameFinished && gameState?.isActive && !gameState?.isCountdown) {
             const winnerEntry = Object.entries(data.race).find(([_, count]) => Number(count) >= 50);
             if (winnerEntry) setGameFinished(true);
          }
 
-         // --- ЛОГИКА ПОБЕДЫ В "ТРЯСИ" ---
          if (gameState?.gameType === GameType.SHAKE_IT && data.shake && !gameFinished && gameState?.isActive) {
             const winnerEntry = Object.entries(data.shake).find(([_, count]) => Number(count) >= 150);
             if (winnerEntry) setGameFinished(true);
@@ -312,6 +307,7 @@ const BigScreenView: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => 
     );
   }
 
+  // Lobby view before game starts
   if (!gameState || (!gameState.isActive && !gameFinished)) {
     return (
       <div ref={containerRef} className="flex-1 flex flex-col items-center justify-center bg-slate-950 p-20 text-center relative overflow-hidden">
@@ -325,8 +321,8 @@ const BigScreenView: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => 
           
           {activeEvent.status === 'LIVE' ? (
             <div className="bg-white p-8 rounded-[40px] shadow-2xl inline-block border-[12px] border-indigo-600/20 animate-in zoom-in duration-500">
-              <img src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=maybeu-live.vercel.app`} alt="QR" className="w-[300px] h-[300px]" />
-              <div className="mt-4 text-indigo-900 font-black text-xl uppercase tracking-widest">{t.joinOn} maybeu.ru</div>
+              <img src={`https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=https://maybeu-live.vercel.app/?code=${activeEvent.code}`} alt="QR" className="w-[300px] h-[300px]" />
+              <div className="mt-4 text-indigo-900 font-black text-xl uppercase tracking-widest">{t.joinOn} maybeu-live.vercel.app</div>
             </div>
           ) : (
             <div className="py-20 animate-in fade-in duration-1000">
@@ -343,6 +339,9 @@ const BigScreenView: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => 
       </div>
     );
   }
+
+  // --- ЗАЩИТА ОТ КРАША ---
+  const currentQuestion = gameState.questions ? gameState.questions[gameState.currentIdx] : null;
 
   return (
     <div ref={containerRef} className="flex-1 flex flex-col bg-slate-950 p-12 overflow-hidden relative">
@@ -402,17 +401,17 @@ const BigScreenView: React.FC<Props> = ({ activeEvent: initialEvent, lang }) => 
           </div>
         ) : (
           <>
-{(gameState.gameType === GameType.QUIZ || gameState.gameType === GameType.BELIEVE_NOT) && gameState.questions && (
+            {(gameState.gameType === GameType.QUIZ || gameState.gameType === GameType.BELIEVE_NOT) && gameState.questions && (
               <div className="max-w-6xl mx-auto w-full space-y-12">
                 <div className="bg-slate-900/50 backdrop-blur-xl p-12 rounded-[60px] border-4 border-white/10 shadow-2xl">
                   <h1 className="text-6xl font-black text-white text-center leading-tight tracking-tight italic">
-                    {gameState.questions[gameState.currentIdx]?.question}
+                    {currentQuestion?.question || '...'}
                   </h1>
                 </div>
                 <div className={`grid gap-8 ${gameState.gameType === GameType.BELIEVE_NOT ? 'grid-cols-2' : 'grid-cols-2'}`}>
-                  {gameState.questions[gameState.currentIdx]?.options.map((opt: string, i: number) => {
+                  {currentQuestion?.options?.map((opt: string, i: number) => {
                     const isRevealed = gameState.isAnswerRevealed;
-                    const isCorrect = i === gameState.questions[gameState.currentIdx]?.correctAnswerIndex;
+                    const isCorrect = i === currentQuestion.correctAnswerIndex;
                     
                     let cardClass = 'bg-slate-900 border-slate-800 text-white';
                     if (isRevealed) {
