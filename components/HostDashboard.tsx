@@ -90,6 +90,21 @@ const TRANSLATIONS = {
   }
 };
 
+// --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ВРЕМЕНИ ---
+const timeToMinutes = (time: string): number => {
+  if (!time) return 0;
+  const [h, m] = time.split(':').map(Number);
+  return (h || 0) * 60 + (m || 0);
+};
+
+const minutesToTime = (minutes: number): string => {
+  let h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  // Обработка перехода через полночь (24:00 -> 00:00)
+  h = h % 24;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+};
+
 const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) => {
   const [tab, setTab] = useState<'EVENTS' | 'GAMES' | 'CRM' | 'INFO' | 'TIMING'>('EVENTS');
   const [events, setEvents] = useState<LiveEvent[]>([]); 
@@ -104,10 +119,8 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
 
   const t = TRANSLATIONS[lang];
 
-  // ЗАГРУЗКА СОБЫТИЙ ИЗ FIREBASE (С ФИЛЬТРАЦИЕЙ БИТЫХ ДАННЫХ)
   useEffect(() => {
     const unsubscribe = FirebaseService.subscribeToAllEvents((data) => {
-      // Фильтруем список: оставляем только те события, у которых есть ID
       const validEvents = (data || []).filter((e: any) => e && e.id);
       setEvents(validEvents);
     });
@@ -120,7 +133,6 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
     }
   }, [activeEvent]); 
 
-  // Мониторинг экрана
   useEffect(() => {
     const unsubScreen = FirebaseService.subscribeToScreenStatus((ts) => {
         if (ts && Date.now() - ts < 8000) {
@@ -159,7 +171,7 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
   };
 
   const handleDeleteEvent = (id: string) => {
-    if (!id) return; // Защита от удаления пустого ID
+    if (!id) return;
     FirebaseService.deleteEventFromDB(id);
     if (activeEvent?.id === id) {
       setActiveEvent(null);
@@ -192,26 +204,59 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
     setActiveEvent(updated as LiveEvent);
   };
 
+  // --- УЛУЧШЕННАЯ ЛОГИКА КАСКАДА ВРЕМЕНИ ---
   const cascadeTimes = (list: TimingItem[]) => {
-    const newList = [...list];
-    for (let i = 0; i < newList.length - 1; i++) {
-      if (newList[i].endTime) {
-        newList[i+1].time = newList[i].endTime as string;
+    const newList = list.map(item => ({ ...item })); // Глубокая копия для безопасности
+
+    for (let i = 0; i < newList.length; i++) {
+      const current = newList[i];
+      
+      // 1. Вычисляем длительность текущего элемента (если время есть)
+      // Если это новый элемент или время не задано, ставим дефолт 30 минут
+      const startMins = timeToMinutes(current.time);
+      const endMins = timeToMinutes(current.endTime || current.time);
+      
+      let duration = endMins - startMins;
+      if (duration <= 0) duration = 30; // Дефолтная длительность 30 мин
+
+      // 2. Если это не первый элемент, его начало должно совпадать с концом предыдущего
+      if (i > 0) {
+        const prevEnd = newList[i - 1].endTime;
+        if (prevEnd) {
+          newList[i].time = prevEnd;
+        }
       }
+
+      // 3. Пересчитываем конец текущего элемента: Новое Начало + Сохраненная Длительность
+      const newStartMins = timeToMinutes(newList[i].time);
+      newList[i].endTime = minutesToTime(newStartMins + duration);
     }
+
     return newList;
   };
 
   const addTimingStep = () => {
     if (!activeEvent) return;
     const lastStep = activeEvent.timetable?.[activeEvent.timetable.length - 1];
+    
+    // Если есть последний шаг, берем его конец как начало нового.
+    // Если нет, ставим 18:00
+    const newStartTime = lastStep?.endTime || '18:00';
+    
+    // Вычисляем конец для нового шага (+30 минут)
+    const newStartMins = timeToMinutes(newStartTime);
+    const newEndTime = minutesToTime(newStartMins + 30);
+
     const newItem: TimingItem = { 
       id: Date.now().toString(), 
-      time: lastStep?.endTime || '', 
-      endTime: '',
+      time: newStartTime, 
+      endTime: newEndTime,
       text: '' 
     };
-    updateDetail('timetable', [...(activeEvent.timetable || []), newItem]);
+    
+    // cascadeTimes не нужен здесь, так как мы добавили в конец, но для надежности можно вызвать
+    const newList = [...(activeEvent.timetable || []), newItem];
+    updateDetail('timetable', newList);
   };
 
   const updateTimingStep = (id: string, field: 'time' | 'endTime' | 'text', value: string) => {
@@ -220,7 +265,10 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
     const idx = steps.findIndex(item => item.id === id);
     if (idx === -1) return;
 
+    // Обновляем значение
     steps[idx] = { ...steps[idx], [field]: value };
+    
+    // Пересчитываем всю цепочку, чтобы сохранить длительности и целостность
     steps = cascadeTimes(steps);
     updateDetail('timetable', steps);
   };
@@ -245,6 +293,8 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
     const item = list[draggedItemIndex];
     list.splice(draggedItemIndex, 1);
     list.splice(index, 0, item);
+    
+    // При перетаскивании пересчитываем времена, сохраняя длительности блоков
     list = cascadeTimes(list);
 
     setDraggedItemIndex(index);
@@ -255,7 +305,7 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
     setDraggedItemIndex(null);
   };
 
-  // --- ЛОГИКА ГЕНЕРАЦИИ DOCX ---
+  // --- ЛОГИКА ГЕНЕРАЦИИ DOCX (ЧИСТАЯ ВЕРСИЯ) ---
   const handleDownloadDocx = async () => {
     if (!activeEvent) return;
 
@@ -267,8 +317,8 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
             children: [
               new Paragraph({
                 children: [
-                  new TextRun({ text: step.time, bold: true, size: 24 }),
-                  new TextRun({ text: step.endTime ? ` - ${step.endTime}` : '', size: 24 })
+                  new TextRun({ text: step.time, bold: true, size: 24, color: "000000" }),
+                  new TextRun({ text: step.endTime ? ` - ${step.endTime}` : '', size: 24, color: "000000" })
                 ]
               })
             ],
@@ -279,7 +329,7 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
             width: { size: 80, type: WidthType.PERCENTAGE },
             children: [
               new Paragraph({
-                children: [new TextRun({ text: step.text, size: 24 })]
+                children: [new TextRun({ text: step.text, size: 24, color: "000000" })]
               })
             ],
             verticalAlign: "center",
@@ -289,17 +339,18 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
       })
     );
 
+    // Шапка таблицы
     tableRows.unshift(
       new TableRow({
         tableHeader: true,
         children: [
           new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: "Время", bold: true, size: 28 })] })],
+            children: [new Paragraph({ children: [new TextRun({ text: "Время", bold: true, size: 28, color: "000000" })] })],
             width: { size: 20, type: WidthType.PERCENTAGE },
             shading: { fill: "E0E0E0" }
           }),
           new TableCell({
-            children: [new Paragraph({ children: [new TextRun({ text: "Действие / Описание", bold: true, size: 28 })] })],
+            children: [new Paragraph({ children: [new TextRun({ text: "Действие / Описание", bold: true, size: 28, color: "000000" })] })],
             width: { size: 80, type: WidthType.PERCENTAGE },
             shading: { fill: "E0E0E0" }
           }),
@@ -311,16 +362,13 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
       sections: [{
         children: [
           new Paragraph({
-            text: activeEvent.name,
-            heading: HeadingLevel.HEADING_1,
+            children: [new TextRun({ text: activeEvent.name || "Сценарий мероприятия", bold: true, size: 48, color: "000000" })],
             alignment: "center",
             spacing: { after: 200 }
           }),
           new Paragraph({
             children: [
-              new TextRun({ text: `Дата: ${activeEvent.date}`, bold: true, size: 28 }),
-              new TextRun({ text: `\nЛокация: ${activeEvent.location || 'Не указана'}`, size: 24 }),
-              new TextRun({ text: `\nКод доступа: ${activeEvent.code}`, color: "4F46E5", size: 24 })
+              new TextRun({ text: `Дата: ${activeEvent.date}`, bold: true, size: 28, color: "000000" }),
             ],
             spacing: { after: 400 }
           }),
@@ -337,24 +385,21 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
             }
           }),
           new Paragraph({ text: "", spacing: { before: 400 } }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "Заметки:", bold: true, size: 24 }),
-              new TextRun({ text: `\n${activeEvent.notes || 'Нет заметок'}`, size: 24 })
-            ]
-          }),
-          new Paragraph({
-            children: [
-              new TextRun({ text: "\nКонтакты:", bold: true, size: 24 }),
-              new TextRun({ text: `\n${activeEvent.contacts || 'Нет контактов'}`, size: 24 })
-            ]
-          })
+          // Только заметки
+          ...(activeEvent.notes ? [
+            new Paragraph({
+              children: [
+                new TextRun({ text: "Заметки / Важная информация:", bold: true, size: 28, color: "000000" }),
+                new TextRun({ text: `\n${activeEvent.notes}`, size: 24, color: "000000" })
+              ]
+            })
+          ] : [])
         ],
       }],
     });
 
     const blob = await Packer.toBlob(doc);
-    saveAs(blob, `Сценарий_${activeEvent.name.replace(/\s+/g, '_')}.docx`);
+    saveAs(blob, `Сценарий_${(activeEvent.name || 'Event').replace(/\s+/g, '_')}.docx`);
   };
 
   return (
@@ -416,7 +461,7 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
                 </div>
               ) : events.map(event => (
                 <div 
-                  key={event.id || Math.random()} // Защита ключа
+                  key={event.id || Math.random()} 
                   onClick={() => setActiveEvent(event)}
                   className={`bg-slate-900 border-2 p-5 rounded-2xl transition-all cursor-pointer group relative overflow-hidden ${activeEvent?.id === event.id ? 'border-indigo-500 ring-4 ring-indigo-500/10' : 'border-slate-800 hover:border-slate-700'}`}
                 >
@@ -477,7 +522,6 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
           </div>
         )}
 
-        {/* ... (Остальной код табов INFO и TIMING без изменений) ... */}
         {tab === 'INFO' && activeEvent && (
           <div className="max-w-4xl mx-auto space-y-8 animate-in slide-in-from-right-4">
              <header className="flex flex-col md:flex-row justify-between items-center gap-6 bg-slate-900 p-8 rounded-[40px] border border-slate-800">
