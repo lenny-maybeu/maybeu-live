@@ -1,54 +1,127 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
-import { QuizQuestion, Language } from "../types";
+import { GoogleGenAI } from "@google/genai";
 
-const apiKey = process.env.API_KEY || '';
-const genAI = new GoogleGenerativeAI(apiKey);
-const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+// 1. ПОЛУЧЕНИЕ КЛЮЧА
+// Для Vite проектов используем import.meta.env или жесткую вставку
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY || "AIzaSyC-vmOaMUz_fBFjltcxp6RyNvyMmAmdqJ0"; 
 
-// ...args: any[] в конце позволяет вызывать функцию с любым количеством лишних параметров
-export const generateQuizQuestions = async (
-  topic: string, 
-  lang: Language, 
-  count: number = 5,
-  ...args: any[]
-): Promise<QuizQuestion[]> => {
-  try {
-    const prompt = `Generate ${count} quiz questions about "${topic}". Language: ${lang}. 
-    Return strictly JSON array: [{ "id": "1", "question": "...", "options": ["A","B","C","D"], "correctAnswerIndex": 0 }]`;
+const client = new GoogleGenAI({ apiKey });
 
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().replace(/```json|```/g, '').trim();
-    return JSON.parse(text);
-  } catch (e) {
-    console.error("AI Error:", e);
-    return [];
+// Проверка наличия ключа
+const checkApiKey = () => {
+  if (!apiKey || apiKey === "ВАШ_КЛЮЧ_ЗДЕСЬ" || apiKey === "") {
+    console.error("API Key is missing!");
+    alert("ОШИБКА: Не указан API ключ в файле services/geminiService.ts");
+    return false;
   }
+  return true;
 };
 
-export const generateBelieveNotQuestions = async (
-  topic: string, 
-  lang: Language, 
-  count: number = 5,
-  ...args: any[]
-): Promise<QuizQuestion[]> => {
+/**
+ * Генерация вопросов для квиза (Gemini 1.5 Flash)
+ */
+export const generateQuizQuestions = async (topic: string, lang: string, count: number = 5, mood: string = 'fun'): Promise<any[]> => {
+  if (!checkApiKey()) return [];
+
   try {
-    const prompt = `Generate ${count} True/False facts about "${topic}". Language: ${lang}.
-    Return strictly JSON array: [{ "id": "1", "question": "...", "correctAnswerIndex": 0, "options": ["True", "False"] }]`;
+    const prompt = `
+      Create ${count} quiz questions about "${topic}". 
+      Language: ${lang}. 
+      Mood: ${mood}.
+      Format: JSON array of objects with keys: 
+      - question (string)
+      - options (array of 4 strings)
+      - correctAnswerIndex (number 0-3)
+      
+      Strictly return ONLY valid JSON. No markdown.
+    `;
+
+    const response = await client.models.generateContent({
+      model: 'gemini-1.5-flash', 
+      contents: { role: 'user', parts: [{ text: prompt }] },
+      config: { responseMimeType: 'application/json' }
+    });
+
+    const text = response.text();
+    if (!text) return [];
     
-    const result = await model.generateContent(prompt);
-    const text = result.response.text().replace(/```json|```/g, '').trim();
-    return JSON.parse(text);
-  } catch (e) {
+    const cleanText = text.replace(/```json|```/g, '').trim();
+    return JSON.parse(cleanText);
+  } catch (error) {
+    console.error("Quiz Error:", error);
     return [];
   }
 };
 
-export const generateGuestGreeting = async (...args: any[]): Promise<string> => {
-  // Берем первый строковый аргумент как имя
-  const name = args.find(a => typeof a === 'string') || 'Guest';
-  return `Welcome, ${name}!`;
+/**
+ * Генерация вопросов "Верю / Не верю"
+ */
+export const generateBelieveNotQuestions = async (topic: string, lang: string, count: number = 5): Promise<any[]> => {
+  if (!checkApiKey()) return [];
+
+  try {
+    const prompt = `
+      Create ${count} "True or False" facts about "${topic}".
+      Language: ${lang}.
+      Format: JSON array of objects:
+      - question (string)
+      - options (array ["True", "False"] localized)
+      - correctAnswerIndex (0 for True, 1 for False)
+      
+      Strictly return ONLY valid JSON.
+    `;
+
+    const response = await client.models.generateContent({
+      model: 'gemini-1.5-flash',
+      contents: { role: 'user', parts: [{ text: prompt }] },
+      config: { responseMimeType: 'application/json' }
+    });
+
+    const text = response.text();
+    if (!text) return [];
+
+    const cleanText = text.replace(/```json|```/g, '').trim();
+    return JSON.parse(cleanText);
+  } catch (error) {
+    console.error("Believe/Not Error:", error);
+    return [];
+  }
 };
 
-export const generateAiImage = async (...args: any[]): Promise<string | null> => {
-  return null;
+/**
+ * Генерация изображений (Imagen 3)
+ */
+export const generateAiImage = async (prompt: string): Promise<string | null> => {
+  if (!checkApiKey()) return null;
+
+  try {
+    // Используем модель для генерации картинок
+    const response = await client.models.generateImages({
+      model: 'imagen-3.0-generate-001', 
+      prompt: prompt,
+      config: {
+        numberOfImages: 1,
+        aspectRatio: '1:1',
+        safetyFilterLevel: 'block_only_high', 
+        personGeneration: 'allow_adult' 
+      }
+    });
+
+    if (response.generatedImages && response.generatedImages.length > 0) {
+      const imgData = response.generatedImages[0].image.base64;
+      return `data:image/jpeg;base64,${imgData}`;
+    }
+    
+    return null;
+  } catch (error: any) {
+    console.error("Image Gen Error:", error);
+    if (error.status === 403) {
+        alert("Ошибка доступа (403). Для генерации картинок API ключ должен быть привязан к платежному аккаунту Google Cloud.");
+    }
+    return null;
+  }
+};
+
+// Заглушка для совместимости, если где-то вызывается
+export const generateGuestGreeting = async (name: string): Promise<string> => {
+    return `Welcome, ${name}!`;
 };
