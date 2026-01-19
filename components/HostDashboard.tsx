@@ -1,9 +1,13 @@
 import { FirebaseService } from '../services/firebase';
 import React, { useState, useEffect } from 'react';
 import { LiveEvent, GameType, Language, TimingItem } from '../types';
-import { Plus, Users, Calendar, Gamepad2, Database, ChevronRight, PlayCircle, X, Trash2, Edit2, MapPin, Clock, Briefcase, Info, Save, ListTodo, GripVertical, MonitorOff, MonitorCheck, AlertTriangle, Check } from 'lucide-react';
+import { Plus, Users, Calendar, Gamepad2, Database, ChevronRight, PlayCircle, X, Trash2, Edit2, MapPin, Clock, Briefcase, Info, Save, ListTodo, GripVertical, MonitorOff, MonitorCheck, AlertTriangle, Check, FileText, Download } from 'lucide-react';
 import QuizControl from './QuizControl';
 import CRMView from './CRMView';
+
+// Импорты для создания DOCX
+import { Document, Packer, Paragraph, Table, TableRow, TableCell, WidthType, HeadingLevel, TextRun, BorderStyle } from "docx";
+import { saveAs } from "file-saver";
 
 interface Props {
   activeEvent: LiveEvent | null;
@@ -41,6 +45,7 @@ const TRANSLATIONS = {
     screenStatus: 'Проектор',
     screenReady: 'ПОДКЛЮЧЕН',
     screenOffline: 'ОФФЛАЙН',
+    downloadDocx: 'Скачать DOCX',
     details: {
       location: 'Локация',
       notes: 'Заметки мероприятия',
@@ -76,6 +81,7 @@ const TRANSLATIONS = {
     screenStatus: 'Screen',
     screenReady: 'CONNECTED',
     screenOffline: 'OFFLINE',
+    downloadDocx: 'Download DOCX',
     details: {
       location: 'Location',
       notes: 'Event Notes',
@@ -86,10 +92,7 @@ const TRANSLATIONS = {
 
 const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) => {
   const [tab, setTab] = useState<'EVENTS' | 'GAMES' | 'CRM' | 'INFO' | 'TIMING'>('EVENTS');
-  const [events, setEvents] = useState<LiveEvent[]>(() => {
-    const saved = localStorage.getItem('mc_events');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [events, setEvents] = useState<LiveEvent[]>([]); 
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEvent, setEditingEvent] = useState<LiveEvent | null>(null);
@@ -101,67 +104,39 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
 
   const t = TRANSLATIONS[lang];
 
+  // ЗАГРУЗКА СОБЫТИЙ ИЗ FIREBASE
   useEffect(() => {
-    localStorage.setItem('mc_events', JSON.stringify(events));
-  }, [events]);
-
-  useEffect(() => {
-    // Если мы В ЭФИРЕ, отправляем данные в Firebase
-    if (activeEvent && activeEvent.status === 'LIVE') {
-      FirebaseService.syncEvent(activeEvent);
-    }
-  }, [activeEvent]); 
-
-  // Sync monitoring (для проверки статуса экрана, можно оставить через Firebase, если переделали BigScreen, или локально)
-  useEffect(() => {
-    // В новой архитектуре статус экрана лучше проверять через Firebase, 
-    // но для совместимости оставим BroadcastChannel, если устройства рядом.
-    // Если нужно глобально - используйте FirebaseService.subscribeToScreenStatus (добавленный в прошлом шаге)
-    const channel = new BroadcastChannel('maybeu_sync');
-    let lastPulse = 0;
-    
-    // Можно добавить подписку на Firebase статус экрана здесь
-    const unsubScreen = FirebaseService.subscribeToScreenStatus((ts) => {
-        if (ts) lastPulse = ts;
+    const unsubscribe = FirebaseService.subscribeToAllEvents((data) => {
+      setEvents(data);
     });
-    
-    channel.onmessage = (msg) => {
-      if (msg.data.type === 'SCREEN_ALIVE') {
-        lastPulse = msg.data.timestamp;
-      }
-    };
-
-    const checkStatus = setInterval(() => {
-       // Если сигнал был менее 5 секунд назад (увеличим интервал для сети)
-      if (Date.now() - lastPulse > 5000) {
-        setIsScreenConnected(false);
-      } else {
-        setIsScreenConnected(true);
-      }
-    }, 1000);
-
-    return () => {
-      clearInterval(checkStatus);
-      channel.close();
-      if (unsubScreen) unsubScreen(); // Отписка если реализована
-    };
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
-    const checkGuests = () => {
-      // Здесь в идеале нужно читать из Firebase, но пока оставим локально или заглушку
-      // Реальный подсчет гостей теперь идет внутри BigScreenView или через подписку на сессию
-    };
-    // ...
-  }, [events]);
+    if (activeEvent) {
+       FirebaseService.saveEventToDB(activeEvent);
+    }
+  }, [activeEvent]); 
+
+  // Мониторинг экрана
+  useEffect(() => {
+    const unsubScreen = FirebaseService.subscribeToScreenStatus((ts) => {
+        if (ts && Date.now() - ts < 8000) {
+            setIsScreenConnected(true);
+        } else {
+            setIsScreenConnected(false);
+        }
+    });
+    return () => unsubScreen();
+  }, []);
 
   const handleSaveEvent = () => {
     if (editingEvent) {
-      setEvents(prev => prev.map(e => e.id === editingEvent.id ? { ...e, ...formData } as LiveEvent : e));
+      const updated = { ...editingEvent, ...formData } as LiveEvent;
+      FirebaseService.saveEventToDB(updated);
+      
       if (activeEvent?.id === editingEvent.id) {
-        const newActive = { ...activeEvent, ...formData } as LiveEvent;
-        setActiveEvent(newActive);
-        localStorage.setItem('active_event', JSON.stringify(newActive));
+        setActiveEvent(updated);
       }
     } else {
       const event: LiveEvent = {
@@ -171,9 +146,10 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
         code: formData.code || Math.random().toString(36).substr(2, 6).toUpperCase(),
         type: formData.type as any || 'PARTY',
         status: 'UPCOMING',
-        timetable: []
+        timetable: [],
+        questions: []
       };
-      setEvents(prev => [event, ...prev]);
+      FirebaseService.saveEventToDB(event);
     }
     setIsModalOpen(false);
     setEditingEvent(null);
@@ -181,10 +157,9 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
   };
 
   const handleDeleteEvent = (id: string) => {
-    setEvents(prev => prev.filter(e => e.id !== id));
+    FirebaseService.deleteEventFromDB(id);
     if (activeEvent?.id === id) {
       setActiveEvent(null);
-      localStorage.removeItem('active_event');
     }
     setConfirmDeleteEventId(null);
   };
@@ -193,26 +168,18 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
     if (!activeEvent) return;
     const isStopping = activeEvent.status === 'LIVE';
     const newStatus: 'UPCOMING' | 'LIVE' | 'COMPLETED' = isStopping ? 'COMPLETED' : 'LIVE';
+    
     const updated: LiveEvent = { ...activeEvent, status: newStatus };
     setActiveEvent(updated);
-    setEvents(prev => prev.map(e => e.id === activeEvent.id ? updated : e));
-    localStorage.setItem('active_event', JSON.stringify(updated));
-
-    // СИНХРОНИЗАЦИЯ ПРИ ПЕРЕКЛЮЧЕНИИ
+    
     FirebaseService.syncEvent(updated);
 
     if (isStopping) {
-      const currentGs = JSON.parse(localStorage.getItem('game_state') || '{}');
-      const finalState = {
-        ...currentGs,
+      FirebaseService.syncGameState({
+        isActive: false,
         isCollectingLeads: true,
         timestamp: Date.now()
-      };
-      localStorage.setItem('game_state', JSON.stringify(finalState));
-      
-      // --- ВАЖНО: ОТПРАВЛЯЕМ СТАТУС В FIREBASE ---
-      FirebaseService.syncGameState(finalState);
-      // -------------------------------------------
+      });
     }
   };
 
@@ -220,8 +187,6 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
     if (!activeEvent) return;
     const updated = { ...activeEvent, [field]: value };
     setActiveEvent(updated as LiveEvent);
-    setEvents(prev => prev.map(e => e.id === activeEvent.id ? (updated as LiveEvent) : e));
-    localStorage.setItem('active_event', JSON.stringify(updated));
   };
 
   const cascadeTimes = (list: TimingItem[]) => {
@@ -287,6 +252,110 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
     setDraggedItemIndex(null);
   };
 
+  // --- ЛОГИКА ГЕНЕРАЦИИ DOCX ---
+  const handleDownloadDocx = async () => {
+    if (!activeEvent) return;
+
+    // Подготовка строк таблицы
+    const tableRows = (activeEvent.timetable || []).map(step => 
+      new TableRow({
+        children: [
+          new TableCell({
+            width: { size: 20, type: WidthType.PERCENTAGE },
+            children: [
+              new Paragraph({
+                children: [
+                  new TextRun({ text: step.time, bold: true, size: 24 }),
+                  new TextRun({ text: step.endTime ? ` - ${step.endTime}` : '', size: 24 })
+                ]
+              })
+            ],
+            verticalAlign: "center",
+            margins: { top: 100, bottom: 100, left: 100, right: 100 }
+          }),
+          new TableCell({
+            width: { size: 80, type: WidthType.PERCENTAGE },
+            children: [
+              new Paragraph({
+                children: [new TextRun({ text: step.text, size: 24 })]
+              })
+            ],
+            verticalAlign: "center",
+            margins: { top: 100, bottom: 100, left: 100, right: 100 }
+          }),
+        ],
+      })
+    );
+
+    // Добавляем шапку таблицы
+    tableRows.unshift(
+      new TableRow({
+        tableHeader: true,
+        children: [
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: "Время", bold: true, size: 28 })] })],
+            width: { size: 20, type: WidthType.PERCENTAGE },
+            shading: { fill: "E0E0E0" }
+          }),
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: "Действие / Описание", bold: true, size: 28 })] })],
+            width: { size: 80, type: WidthType.PERCENTAGE },
+            shading: { fill: "E0E0E0" }
+          }),
+        ]
+      })
+    );
+
+    const doc = new Document({
+      sections: [{
+        children: [
+          new Paragraph({
+            text: activeEvent.name,
+            heading: HeadingLevel.HEADING_1,
+            alignment: "center",
+            spacing: { after: 200 }
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: `Дата: ${activeEvent.date}`, bold: true, size: 28 }),
+              new TextRun({ text: `\nЛокация: ${activeEvent.location || 'Не указана'}`, size: 24 }),
+              new TextRun({ text: `\nКод доступа: ${activeEvent.code}`, color: "4F46E5", size: 24 })
+            ],
+            spacing: { after: 400 }
+          }),
+          new Table({
+            rows: tableRows,
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            borders: {
+              top: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              bottom: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              left: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              right: { style: BorderStyle.SINGLE, size: 1, color: "000000" },
+              insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+              insideVertical: { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" },
+            }
+          }),
+          new Paragraph({ text: "", spacing: { before: 400 } }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "Заметки:", bold: true, size: 24 }),
+              new TextRun({ text: `\n${activeEvent.notes || 'Нет заметок'}`, size: 24 })
+            ]
+          }),
+          new Paragraph({
+            children: [
+              new TextRun({ text: "\nКонтакты:", bold: true, size: 24 }),
+              new TextRun({ text: `\n${activeEvent.contacts || 'Нет контактов'}`, size: 24 })
+            ]
+          })
+        ],
+      }],
+    });
+
+    const blob = await Packer.toBlob(doc);
+    saveAs(blob, `Сценарий_${activeEvent.name.replace(/\s+/g, '_')}.docx`);
+  };
+
   return (
     <div className="flex flex-col h-full bg-slate-950 overflow-hidden">
       <div className="flex border-b border-slate-800 bg-slate-900/30 shrink-0 overflow-x-auto">
@@ -324,7 +393,7 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
          )}
       </div>
 
-      {/* ... Остальной UI без изменений (табы EVENTS, INFO, TIMING, GAMES, CRM) ... */}
+      {/* TABS */}
       <div className="flex-1 overflow-y-auto p-4 md:p-8">
         {tab === 'EVENTS' && (
           <div className="max-w-4xl mx-auto space-y-6">
@@ -347,7 +416,7 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
               ) : events.map(event => (
                 <div 
                   key={event.id}
-                  onClick={() => { setActiveEvent(event); localStorage.setItem('active_event', JSON.stringify(event)); }}
+                  onClick={() => setActiveEvent(event)}
                   className={`bg-slate-900 border-2 p-5 rounded-2xl transition-all cursor-pointer group relative overflow-hidden ${activeEvent?.id === event.id ? 'border-indigo-500 ring-4 ring-indigo-500/10' : 'border-slate-800 hover:border-slate-700'}`}
                 >
                   <div className="flex justify-between items-start relative z-10">
@@ -399,9 +468,6 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
                     <div>
                       <h3 className="text-2xl font-black text-white">{event.name}</h3>
                       <p className="text-slate-500 font-bold uppercase text-xs tracking-widest mt-1">{t.code}: <span className="text-indigo-400 font-mono">{event.code}</span></p>
-                    </div>
-                    <div className="flex items-center gap-2 text-slate-400 text-sm font-bold bg-slate-950 px-4 py-2 rounded-xl">
-                      <Users size={16} className="text-indigo-500" /> {guestCounts[event.code] || 0} {t.guests}
                     </div>
                   </div>
                 </div>
@@ -471,9 +537,17 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
           <div className="max-w-3xl mx-auto space-y-6 animate-in slide-in-from-right-4">
              <div className="flex justify-between items-center">
                 <h3 className="text-2xl font-black text-white italic">{t.timingTab}</h3>
-                <button onClick={addTimingStep} className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2">
-                  <Plus size={16} /> {t.addStep}
-                </button>
+                <div className="flex gap-2">
+                  <button 
+                    onClick={handleDownloadDocx}
+                    className="bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2 hover:bg-slate-700 transition-colors"
+                  >
+                    <Download size={16} /> {t.downloadDocx}
+                  </button>
+                  <button onClick={addTimingStep} className="bg-indigo-600 text-white px-4 py-2 rounded-xl text-xs font-black flex items-center gap-2">
+                    <Plus size={16} /> {t.addStep}
+                  </button>
+                </div>
              </div>
 
              <div className="space-y-3">
