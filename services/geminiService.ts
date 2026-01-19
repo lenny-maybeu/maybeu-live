@@ -6,6 +6,8 @@ import { QuizQuestion, Language } from "../types";
  * The API key is obtained exclusively from the environment variable process.env.API_KEY.
  */
 
+// --- ВАШ РАБОЧИЙ КОД КВИЗА (НЕ ТРОГАЛ) ---
+
 export const generateQuizQuestions = async (
   topic: string, 
   lang: Language, 
