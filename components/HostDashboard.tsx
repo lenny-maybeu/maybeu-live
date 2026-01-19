@@ -317,9 +317,7 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
           }),
           new Paragraph({
             children: [
-              new TextRun({ text: `Дата: ${activeEvent.date}`, bold: true, size: 28 }),
-              new TextRun({ text: `\nЛокация: ${activeEvent.location || 'Не указана'}`, size: 24 }),
-              new TextRun({ text: `\nКод доступа: ${activeEvent.code}`, color: "4F46E5", size: 24 })
+              new TextRun({ text: `Дата: ${activeEvent.date}`, bold: true, size: 28})
             ],
             spacing: { after: 400 }
           }),
@@ -344,7 +342,7 @@ const HostDashboard: React.FC<Props> = ({ activeEvent, setActiveEvent, lang }) =
           }),
           new Paragraph({
             children: [
-              new TextRun({ text: "\nКонтакты:", bold: true, size: 24 }),
+              new TextRun({ text: "Контакты:", bold: true, size: 24 }),
               new TextRun({ text: `\n${activeEvent.contacts || 'Нет контактов'}`, size: 24 })
             ]
           })

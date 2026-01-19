@@ -35,14 +35,10 @@ const CRMView: React.FC<Props> = ({ lang }) => {
   const [search, setSearch] = useState('');
   const t = TRANSLATIONS[lang];
 
-  // ПОДПИСКА НА FIREBASE ВМЕСТО LOCALSTORAGE
   useEffect(() => {
     const unsubscribe = FirebaseService.subscribeToLeads((data) => {
-      // Firebase возвращает данные, мы их сразу кладем в стейт
       setLeads(data as GuestRecord[]);
     });
-
-    // Отписываемся при выходе с экрана
     return () => unsubscribe();
   }, []);
 
@@ -55,7 +51,6 @@ const CRMView: React.FC<Props> = ({ lang }) => {
   const handleDownload = () => {
     if (leads.length === 0) return;
     
-    // BOM для корректного отображения кириллицы в Excel
     const BOM = "\uFEFF"; 
     const headers = [t.cols.name, t.cols.contact, t.cols.bday, t.cols.notes, t.cols.date].join(';');
     const rows = leads.map(l => 
@@ -81,14 +76,15 @@ const CRMView: React.FC<Props> = ({ lang }) => {
 
   return (
     <div className="max-w-6xl mx-auto space-y-8 animate-in fade-in slide-in-from-bottom-4">
-       <div className="flex flex-col md:flex-row justify-between items-end gap-6 border-b border-slate-800 pb-8">
+       {/* Заголовок и кнопки */}
+       <div className="flex flex-col md:flex-row justify-between items-center md:items-end gap-6 border-b border-slate-800 pb-8 text-center md:text-left">
           <div>
-            <h2 className="text-3xl font-black text-white italic flex items-center gap-3">
+            <h2 className="text-3xl font-black text-white italic flex items-center justify-center md:justify-start gap-3">
                <Database className="text-indigo-500" /> {t.title}
             </h2>
             <p className="text-slate-400 font-bold mt-2">{t.subtitle}</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 w-full md:w-auto justify-center">
              <button 
                onClick={handleClear}
                disabled={leads.length === 0}
@@ -106,6 +102,7 @@ const CRMView: React.FC<Props> = ({ lang }) => {
           </div>
        </div>
 
+       {/* Поиск */}
        <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" size={20} />
           <input 
@@ -116,6 +113,7 @@ const CRMView: React.FC<Props> = ({ lang }) => {
           />
        </div>
 
+       {/* Таблица */}
        <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
           {filteredLeads.length > 0 ? (
             <div className="overflow-x-auto">
